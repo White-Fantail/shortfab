@@ -89,6 +89,13 @@ app.whenReady().then(() => {
     requireIdle();
     return projects.attachMedia(file, false);
   });
+  ipcMain.handle('project:bindYouTube', async (_event, grant: unknown) => {
+    requireIdle();
+    const file = await pickFile();
+    if (!file) return null;
+    requireIdle();
+    return projects.bindYouTubeMedia(file, grant);
+  });
   ipcMain.handle('project:reconnectMedia', async () => {
     requireIdle();
     const file = await pickFile();
@@ -114,6 +121,7 @@ app.whenReady().then(() => {
     const projectId = projects.activeProjectId;
     if (!projectId) throw new Error('프로젝트를 먼저 여세요.');
     const proposed = validatePublishDraft(metadata);
+    await projects.assertYouTubePublishAllowed();
     const overview = await publisher.overview();
     const artifact = overview.artifact;
     if (!artifact || artifact.projectId !== projectId) {
@@ -154,19 +162,28 @@ app.whenReady().then(() => {
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
     if (renderBusy || publisher.isBusy) throw new Error('이미 렌더링 또는 게시 작업 중입니다.');
-    const source = projects.activeSource;
-    if (!source) throw new Error('로컬 원본 영상을 먼저 연결하거나 재연결하세요.');
-    const request = validateRenderRequest(input, source.info.duration);
-    if (request.sourceId !== source.id) throw new Error('원본이 변경되었습니다. 다시 선택하세요.');
     const activeClip = projects.activeClip;
     const projectId = projects.activeProjectId;
-    if (!projectId || !activeClip || activeClip.source !== 'local' || activeClip.start !== request.start ||
-      activeClip.end !== request.end || activeClip.width !== request.width) {
+    if (!activeClip || !projectId) throw new Error('익스포트할 클립을 선택해 주세요.');
+    const youtube = activeClip.source === 'youtube'
+      ? await projects.renderableYouTubeSource() : null;
+    const local = activeClip.source === 'local' ? projects.activeSource : null;
+    if (!youtube && !local) throw new Error('렌더에 사용할 원본 파일이 없습니다.');
+    const source = youtube ? {
+      id: youtube.id, path: youtube.path, name: projects.youtubeBinding?.fileName ?? 'youtube-source.mp4',
+      duration: youtube.duration,
+    } : { id: local!.id, path: local!.path, name: local!.info.name, duration: local!.info.duration };
+    const request = validateRenderRequest(input, source.duration);
+    const offset = youtube?.offset ?? 0;
+    if (request.sourceId !== source.id ||
+      Math.abs(request.start - (activeClip.start + offset)) > 0.0001 ||
+      Math.abs(request.end - (activeClip.end + offset)) > 0.0001 ||
+      activeClip.width !== request.width) {
       throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
     }
     renderBusy = true;
     try {
-      const base = parse(source.info.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
+      const base = parse(source.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
       const options: SaveDialogOptions = {
         title: 'MP4 내보내기',
         defaultPath: `${base || 'shortfab'}-${Math.floor(request.start)}-${Math.floor(request.end)}.mp4`,
@@ -177,6 +194,7 @@ app.whenReady().then(() => {
         ? await dialog.showSaveDialog(mainWindow, options)
         : await dialog.showSaveDialog(options);
       if (chosen.canceled || !chosen.filePath) return { status: 'cancelled' };
+      if (youtube) await projects.renderableYouTubeSource(); // Recheck after save dialog.
       currentTask = new RenderTask();
       const path = chosen.filePath.toLowerCase().endsWith('.mp4') ? chosen.filePath : `${chosen.filePath}.mp4`;
       await currentTask.run(source.path, path, request, (progress) => {
