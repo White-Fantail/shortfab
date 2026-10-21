@@ -6,7 +6,7 @@ import { probeMedia } from './media.js';
 import type { MediaInfo } from '../src/shared/contracts.js';
 import {
   isProjectId, validateProjectEdits,
-  type ProjectClip, type ProjectEdits, type ProjectRecord,
+  type ProjectClip, type ProjectRecord,
   type ProjectSummary, type ProjectView, type StoredAsset,
 } from '../src/shared/projects.js';
 

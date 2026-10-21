@@ -85,4 +85,12 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 - 렌더 요청은 `sourceId` 일치, 유한한 시간 범위, 720/1080 해상도만 수용. 파일 시스템 경로 선택은 메인 프로세스에서만 허용.
 
 해당 프로토타입은 제품 플랫폼 확정이나 AI/SNS/스타일 카탈로그 구현을 의미하지 않습니다. 검증 순서·개발환경은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
-\n## Phase 1 저장/재열기 1차 구조 (2026-10-22)\n\n- `src/shared/projects.ts`에 Project/StoredAsset/ProjectClip/ProjectEdits/ProjectView 계약, 스키마 버전 1과 타입·구간·중복 ID 검증을 둡니다.\n- `electron/projects.ts`는 앱 사용자 데이터 폴더의 `projects/{uuid}.json` 읽기·임시 파일 원자 교체·리스트·현재 프로젝트 활성화·원본 연결/재연결을 담당합니다. 렌더러는 파일 경로 대신 편집 값만 전달합니다.\n- `project:list/create/open/save`와 `project:pickMedia/reconnectMedia`만 preload로 노출합니다. 기존 `render:start`의 sourceId와 로컬 경로 검증은 유지합니다.\n- 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.\n- Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.\n- **검증 상태:** 단위 테스트 코드 추가, 실제 앱 실행·CI·OS별 재연결/원자 저장 동작은 확인 대기.\n
+
+## Phase 1 저장/재열기 1차 구조 (2026-10-22)
+
+- `src/shared/projects.ts`에 Project/StoredAsset/ProjectClip/ProjectEdits/ProjectView 계약, 스키마 버전 1과 타입·구간·중복 ID 검증을 둡니다.
+- `electron/projects.ts`는 앱 사용자 데이터 폴더의 `projects/{uuid}.json` 읽기·임시 파일 원자 교체·리스트·현재 프로젝트 활성화·원본 연결/재연결을 담당합니다. 렌더러는 파일 경로 대신 편집 값만 전달합니다.
+- `project:list/create/open/save`와 `project:pickMedia/reconnectMedia`만 preload로 노출합니다. 기존 `render:start`의 sourceId와 로컬 경로 검증은 유지합니다.
+- 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.
+- Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.
+- **검증 상태:** 단위 테스트 코드 추가, 실제 앱 실행·CI·OS별 재연결/원자 저장 동작은 확인 대기.
