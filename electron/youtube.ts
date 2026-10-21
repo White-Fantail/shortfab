@@ -7,7 +7,7 @@ import { basename, join } from 'node:path';
 import { app, safeStorage, shell } from 'electron';
 import {
   interpretYouTubeState, nextUploadOffset, validatePublishDraft,
-  type PublishDraft, type PublishJobView, type PublishOverview, type PublishState,
+  type PublishJobView, type PublishOverview, type PublishState,
 } from '../src/shared/publishing.js';
 
 const SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
