@@ -88,7 +88,8 @@ export function validateBindSourceRequest(input: unknown): BindSourceRequest {
 
 export function hasActiveRights(rights: RightsGrant, now = new Date()): boolean {
   if (!rights || rights.allowClip !== true || rights.allowDerivativeEdit !== true ||
-      !rights.evidenceRef?.trim() || !rights.rightsHolder?.trim()) return false;
+      !rights.evidenceRef?.trim() || !rights.rightsHolder?.trim() ||
+      !Array.isArray(rights.allowedPlatforms) || rights.allowedPlatforms.some(p => typeof p !== 'string')) return false;
   if (rights.expiresAt) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rights.expiresAt)) return false;
     const expires = Date.parse(rights.expiresAt + 'T23:59:59Z');
