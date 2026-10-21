@@ -121,3 +121,8 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 `YouTubeReference`는 정규화된 videoId·URL·IFrame 메타데이터(길이)를 나타냅니다. `RightsGrant`는 권리자 이름, 사용 허가 증빙 참조, 발췌/변형/재게시 허용 범위와 만료를 **사용자가 선언한 데이터**로 보존합니다. `MediaBinding`은 videoId→원본 assetId·파일 SHA-256·길이·시간 오프셋을 고정하며, 실제 로컬 경로를 포함하는 `StoredMediaBinding`은 Electron 메인 프로세스 전용 프로젝트 JSON 및 `userData/sources/approved/`에만 보관합니다.
 
 `SourceResolver`는 미확보/허가 검토/파일 손실/렌더 가능 상태를 분리하고, 같은 videoId의 등록 자산을 앱 내에서 자동 매칭합니다. YouTube 클립 렌더는 `sourceTime = youtubeTime + startOffsetSeconds`로 변환하고 FFmpeg 직전에 파일·허가·해시를 재확인합니다. YouTube **게시**는 별도의 재게시 권한과 사용자 승인을 요구합니다. SHA-256·길이 검증은 YouTube 콘텐츠와의 실제 동일성/법적 권리 진위까지 증명하지 않으므로 해당 검증 및 승인 원격 스토리지 어댑터는 후속 단계입니다. [검증 가이드](YF1_AUTHORIZED_SOURCES.md).
+
+
+## 승인 클라우드 원본 경계 (YF-1, 2026-10-22)
+
+권리자 제공 직접 HTTPS 미디어만 `SHORTFAB_APPROVED_SOURCE_HOSTS` exact 호스트 allowlist와 사전 제공 SHA-256을 조건으로 허용합니다. Electron의 `electron/cloud.ts`는 메인 프로세스에서 DNS 공개 IPv4 IP 고정·TLS·리다이렉트 금지·시간/크기 제한·응답 크기/해시 확인을 수행하고, 다운로드 완료 후 기존 로컬 권한/FFprobe/타임 오프셋 검증 체계로 연결합니다. Renderer와 프로젝트 데이터에는 원격 서명 URL을 저장하지 않습니다. 파트너 API 인증/갱신/권리 매니페스트 검증과 YouTube 영상 프레임 동일성은 아직 미구현이며, 단순 해시 검증을 그것의 대체로 취급하지 않습니다.
