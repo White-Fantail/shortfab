@@ -90,6 +90,20 @@ function App() {
     editVersion.current += 1;
     setProject(view);
     setDraft(edits);
+    const linkedRights = view.youtubeSource.binding;
+    setRightsForm(linkedRights ? {
+      rightsHolder: linkedRights.rights.rightsHolder,
+      evidenceRef: linkedRights.rights.evidenceRef,
+      allowClip: linkedRights.rights.allowClip,
+      allowDerivativeEdit: linkedRights.rights.allowDerivativeEdit,
+      allowRepost: linkedRights.rights.allowRepost,
+      expiresAt: linkedRights.rights.expiresAt,
+      startOffsetSeconds: linkedRights.startOffsetSeconds,
+      expectedSha256: linkedRights.sha256,
+    } : {
+      rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
+      allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
+    });
     setDirty(false);
     setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.media ? 'local' : 'youtube'));
     setLoopClip(false);
@@ -300,6 +314,13 @@ function App() {
   }
 
   function setYoutubeUrl(value: string) {
+    if (youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== youtubeVideoId(value)) {
+      // Never carry declarations of one video's rights across to another video ID.
+      setRightsForm({
+        rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
+        allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
+      });
+    }
     changeDraft((current) => {
       const previous = youtubeVideoId(current.youtubeUrl);
       const incoming = youtubeVideoId(value);
