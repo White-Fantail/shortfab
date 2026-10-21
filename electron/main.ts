@@ -6,6 +6,7 @@ import { ProjectStore } from './projects.js';
 import { RenderTask } from './render.js';
 import { YouTubePublisher } from './youtube.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
+import { validatePublishDraft } from '../src/shared/publishing.js';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'shortfab-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
@@ -112,15 +113,25 @@ app.whenReady().then(() => {
     requireIdle();
     const projectId = projects.activeProjectId;
     if (!projectId) throw new Error('프로젝트를 먼저 여세요.');
+    const proposed = validatePublishDraft(metadata);
+    const overview = await publisher.overview();
+    const artifact = overview.artifact;
+    if (!artifact || artifact.projectId !== projectId) {
+      throw new Error('게시할 수 있는 MP4를 먼저 익스포트해 주세요.');
+    }
+    const visibility = { private: '비공개', unlisted: '일부 공개', public: '전체 공개' }[proposed.privacyStatus];
     // Approval is in the privileged main process, not an implicit side effect of export.
     const choice = await dialog.showMessageBox({
       type: 'question', title: 'YouTube 업로드 최종 승인',
       message: '현재 MP4를 연결된 YouTube 계정으로 업로드할까요?',
-      detail: '공개 범위 및 대상 아동 여부를 확인하세요. 이 버튼은 외부 업로드를 시작합니다.',
+      detail: '파일: ' + artifact.filename + '\n제목: ' + proposed.title +
+        '\n공개 범위: ' + visibility +
+        '\n아동용: ' + (proposed.madeForKids ? '예' : '아니오') +
+        '\n승인하면 Google 서버에 영상 파일이 전송됩니다.',
       buttons: ['취소', '업로드 승인'], defaultId: 0, cancelId: 0, noLink: true,
     });
     if (choice.response !== 1) return null;
-    return publisher.start(metadata, projectId, projects.activeClip);
+    return publisher.start(proposed, projectId, projects.activeClip);
   });
   ipcMain.handle('publish:retry', async (_event, id: string) => {
     requireIdle();
