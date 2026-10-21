@@ -1,6 +1,6 @@
 # 아키텍처 · 도메인 모델 (초기 설계)
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **기획/미구현**. 아키텍처 원칙은 고정하고 구현 언어/프레임워크는 ADR 검증 전 후보로 취급합니다.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 실험 구현 중**. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
 
 ## 시스템 경계
 
@@ -73,3 +73,15 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 2. Local worker 및 렌더/취소/재시도 계약 테스트.
 3. 선언형 기본 스타일과 CTA 설정 → 실제 샘플 영상 재현.
 4. AI adapters, 원격 카탈로그, 게시 adapters 순차 도입.
+
+## Phase 0 실험 구현 경계 (2026-10-22)
+
+- `src/App.tsx`: React 로컬 미리보기·In/Out/출력 선택 UI. YouTube는 공식 임베드 **프리뷰만** 가능하며 타임코드 API 마커는 다음 단계.
+- `src/shared/contracts.ts`: 프레임 비율, 렌더 요청 검증, YouTube 링크 ID 파싱. 실제 원본 경로는 전달하지 않음.
+- `electron/preload.ts`: 허용된 최소 IPC만 노출, `electron/main.ts`에서 사용자 파일 선택·식별자 검증·저장 경로 확인.
+- `electron/media.ts`: 로컬 ffprobe; `electron/render.ts`: 로컬 ffmpeg 하위 프로세스, 출력 크롭/진행도/취소·임시 파일 검증.
+- `shortfab-media://asset/current`: 사용자가 선택한 **현재 파일 하나만** 로컬 미리보기로 노출하는 내부 URL. 렌더 엔진이 URL을 다운로드하지 않음.
+- 별도 FFmpeg 프로세스를 사용하지만 렌더 큐·오래 지속되는 독립 워커·프로젝트 저장은 아직 없음. FFmpeg/FFprobe는 PATH에 설치된 바이너리를 사용.
+- 렌더 요청은 `sourceId` 일치, 유한한 시간 범위, 720/1080 해상도만 수용. 파일 시스템 경로 선택은 메인 프로세스에서만 허용.
+
+해당 프로토타입은 제품 플랫폼 확정이나 AI/SNS/스타일 카탈로그 구현을 의미하지 않습니다. 검증 순서·개발환경은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.

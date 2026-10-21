@@ -1,6 +1,6 @@
 # UX · 화면/작업 흐름 명세
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **기획/미구현**.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **요구사항 명세**. 로컬 소스 → 범위 → 9:16 MP4 프로토타입 UI만 Phase 0 코드에 반영됨. 프로젝트 저장·다수 클립·자막·CTA·출판은 미구현.
 
 ## Quick Create (기본 사용자 경험)
 
