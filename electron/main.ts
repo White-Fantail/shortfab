@@ -139,7 +139,8 @@ app.whenReady().then(() => {
       buttons: ['취소', '업로드 승인'], defaultId: 0, cancelId: 0, noLink: true,
     });
     if (choice.response !== 1) return null;
-    return publisher.start(proposed, projectId, projects.activeClip);
+    return publisher.start(proposed, projectId, projects.activeClip,
+      projects.selectedClipSource === 'youtube' ? projects.youtubeBinding?.sourceAssetId ?? null : null);
   });
   ipcMain.handle('publish:retry', async (_event, id: string) => {
     requireIdle();
@@ -202,7 +203,8 @@ app.whenReady().then(() => {
           mainWindow.webContents.send('render:progress', progress);
         }
       });
-      await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end, activeClip.width);
+      await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end,
+        activeClip.width, youtube?.id ?? null);
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
