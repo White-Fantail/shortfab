@@ -19,11 +19,13 @@ interface SavedJob extends PublishJobView {
   fileSize: number;
   fileHash: string;
   sessionUrl: string | null; // Upload session URL is a bearer-like secret.
+  connectionId: string; // Never retry a job on a different Google connection.
 }
 
 interface VaultData {
   version: 1;
   refreshToken: string | null;
+  connectionId: string | null;
   jobs: SavedJob[];
 }
 
@@ -31,6 +33,9 @@ interface Artifact {
   path: string;
   projectId: string;
   clipId: string;
+  start: number;
+  end: number;
+  width: number;
 }
 
 interface UploadResponse {
@@ -208,13 +213,14 @@ export class YouTubePublisher {
     try { encrypted = await readFile(vaultPath()); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      this.vault = { version: 1, refreshToken: null, jobs: [] };
+      this.vault = { version: 1, refreshToken: null, connectionId: null, jobs: [] };
       return this.vault;
     }
     try {
       const parsed = JSON.parse(safeStorage.decryptString(encrypted)) as VaultData;
       if (parsed.version !== 1 || !Array.isArray(parsed.jobs) ||
         (parsed.refreshToken !== null && typeof parsed.refreshToken !== 'string')) throw new Error();
+      parsed.connectionId ??= null;
       this.vault = parsed;
       // A crash during upload must not cause a second videos.insert.
       for (const job of parsed.jobs) {
@@ -247,15 +253,16 @@ export class YouTubePublisher {
       connected: Boolean(vault.refreshToken),
       artifact: this.artifact ? {
         filename: basename(this.artifact.path), projectId: this.artifact.projectId, clipId: this.artifact.clipId,
+        start: this.artifact.start, end: this.artifact.end, width: this.artifact.width,
       } : null,
       jobs: vault.jobs.slice(-20).reverse().map(jobView),
     };
   }
 
-  async recordRender(path: string, projectId: string, clipId: string): Promise<void> {
+  async recordRender(path: string, projectId: string, clipId: string, start: number, end: number, width: number): Promise<void> {
     const info = await stat(path);
     if (!info.isFile() || info.size < 1) throw new Error('익스포트 파일이 올바르지 않습니다.');
-    this.artifact = { path, projectId, clipId };
+    this.artifact = { path, projectId, clipId, start, end, width };
   }
 
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
@@ -281,6 +288,7 @@ export class YouTubePublisher {
         throw new Error('오프라인 업로드 권한을 받지 못했습니다. Google 연결을 해제한 후 다시 시도해 주세요.');
       }
       vault.refreshToken = result.refresh_token || vault.refreshToken;
+      vault.connectionId = randomUUID();
       this.access = { token: result.access_token, expires: Date.now() + (result.expires_in ?? 3600) * 1000 };
       await this.persist();
       return this.overview();
@@ -292,6 +300,7 @@ export class YouTubePublisher {
       const vault = await this.load();
       const token = vault.refreshToken;
       vault.refreshToken = null;
+      vault.connectionId = null;
       this.access = null;
       await this.persist();
       if (token) {
@@ -339,13 +348,17 @@ export class YouTubePublisher {
     return response;
   }
 
-  async start(metadataInput: unknown, projectId: string): Promise<PublishJobView> {
+  async start(metadataInput: unknown, projectId: string, selectedClip: { id: string; start: number; end: number; width: number } | null): Promise<PublishJobView> {
     return this.exclusive(async () => {
       const metadata = validatePublishDraft(metadataInput);
       const file = this.artifact;
-      if (!file || file.projectId !== projectId) throw new Error('현재 프로젝트에서 MP4를 다시 익스포트해 주세요.');
+      if (!file || file.projectId !== projectId || !selectedClip ||
+        file.clipId !== selectedClip.id || file.start !== selectedClip.start ||
+        file.end !== selectedClip.end || file.width !== selectedClip.width) {
+        throw new Error('선택한 클립이 익스포트 후 수정되었습니다. MP4를 다시 익스포트해 주세요.');
+      }
       const vault = await this.load();
-      if (!vault.refreshToken || !googleConfig()) throw new Error('YouTube 계정을 연결해 주세요.');
+      if (!vault.refreshToken || !vault.connectionId || !googleConfig()) throw new Error('YouTube 계정을 연결해 주세요.');
       const info = await stat(file.path);
       if (!info.isFile() || info.size < 1 || info.size > MAX_SIZE) throw new Error('업로드할 MP4 파일 크기를 확인해 주세요.');
       const hash = await fileHash(file.path);
@@ -360,7 +373,8 @@ export class YouTubePublisher {
       const job: SavedJob = {
         id: randomUUID(), projectId: file.projectId, clipId: file.clipId,
         filename: basename(file.path), filePath: file.path, fileSize: info.size,
-        fileHash: hash, sessionUrl: null, state: 'uploading', progress: 0,
+        fileHash: hash, sessionUrl: null, connectionId: vault.connectionId,
+        state: 'uploading', progress: 0,
         metadata, remoteUrl: null, createdAt: now, updatedAt: now, message: '업로드 세션 준비 중',
       };
       vault.jobs.push(job);
@@ -374,7 +388,7 @@ export class YouTubePublisher {
     return this.exclusive(async () => {
       const vault = await this.load();
       const job = vault.jobs.find(item => item.id === id && item.projectId === projectId);
-      if (!job || job.state !== 'failed' || !job.sessionUrl) {
+      if (!job || job.state !== 'failed' || !job.sessionUrl || job.connectionId !== vault.connectionId) {
         throw new Error('재개할 수 없는 작업입니다. YouTube Studio에서 상태를 확인해 주세요.');
       }
       const info = await stat(job.filePath);
@@ -461,7 +475,7 @@ export class YouTubePublisher {
     return this.exclusive(async () => {
       const vault = await this.load();
       const job = vault.jobs.find(item => item.id === id && item.projectId === projectId);
-      if (!job || !job.remoteUrl) throw new Error('업로드된 영상 ID가 없는 작업입니다.');
+      if (!job || !job.remoteUrl || job.connectionId !== vault.connectionId) throw new Error('이 계정에서 조회 가능한 업로드 작업이 아닙니다.');
       const videoId = new URL(job.remoteUrl).searchParams.get('v');
       if (!videoId) throw new Error('영상 ID가 올바르지 않습니다.');
       const response = await this.authenticated(
