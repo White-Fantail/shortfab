@@ -25,7 +25,7 @@ export interface PublishJobView {
 export interface PublishOverview {
   configured: boolean;
   connected: boolean;
-  artifact: { filename: string; projectId: string; clipId: string } | null;
+  artifact: { filename: string; projectId: string; clipId: string; start: number; end: number; width: number } | null;
   jobs: PublishJobView[];
 }
 
