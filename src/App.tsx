@@ -469,13 +469,20 @@ function App() {
         </main>
 
         <aside className="export-panel" aria-label="출력 및 게시 설정">
-          <div className="output-tabs" role="tablist" aria-label="출력 작업">
+          <div className="output-tabs" role="tablist" aria-label="출력 작업"
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next: OutputTab = event.key === 'ArrowLeft' || event.key === 'Home' ? 'export' : 'publish';
+              setOutputTab(next);
+              event.currentTarget.querySelector<HTMLButtonElement>(`#output-${next}-tab`)?.focus();
+            }}>
             <button id="output-export-tab" role="tab" type="button"
-              aria-selected={outputTab === 'export'} aria-controls="output-export-panel"
+              aria-selected={outputTab === 'export'} tabIndex={outputTab === 'export' ? 0 : -1} aria-controls="output-export-panel"
               className={outputTab === 'export' ? 'active' : ''}
               onClick={() => setOutputTab('export')}>MP4 익스포트</button>
             <button id="output-publish-tab" role="tab" type="button"
-              aria-selected={outputTab === 'publish'} aria-controls="output-publish-panel"
+              aria-selected={outputTab === 'publish'} tabIndex={outputTab === 'publish' ? 0 : -1} aria-controls="output-publish-panel"
               className={outputTab === 'publish' ? 'active' : ''}
               onClick={() => setOutputTab('publish')}>YouTube 게시</button>
           </div>
