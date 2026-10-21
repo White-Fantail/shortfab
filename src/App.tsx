@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { youtubeVideoId, type RenderProgress } from './shared/contracts';
+import { YouTubePreview, type YouTubeControls } from './YouTubePreview';
 import type { ProjectClip, ProjectEdits, ProjectSummary, ProjectView } from './shared/projects';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
@@ -15,7 +16,7 @@ function formatTime(seconds: number): string {
 function editorData(view: ProjectView): ProjectEdits {
   return {
     id: view.id, revision: view.revision, title: view.title,
-    youtubeUrl: view.youtubeUrl, clips: view.clips,
+    youtubeUrl: view.youtubeUrl, youtubeDuration: view.youtubeDuration, clips: view.clips,
     selectedClipId: view.selectedClipId,
   };
 }
@@ -24,7 +25,8 @@ function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectView | null>(null);
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
-  const [sourceTab, setSourceTab] = useState<SourceTab>('local');
+  const [sourceTab, setSourceTab] = useState<SourceTab>('youtube');
+  const [loopClip, setLoopClip] = useState(false);
   const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
@@ -41,20 +43,23 @@ function App() {
   const [status, setStatus] = useState('프로젝트를 불러오는 중입니다.');
   const [error, setError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const youtubePlayer = useRef<YouTubeControls>(null);
   const projectRef = useRef<ProjectView | null>(null);
   const draftRef = useRef<ProjectEdits | null>(null);
   const dirtyRef = useRef(false);
   const editVersion = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
-  const clip = draft?.clips.find((item) => item.id === draft.selectedClipId);
+  const clip = draft?.clips.find((item) => item.id === draft.selectedClipId && item.source === sourceTab);
+  const visibleClips = draft?.clips.filter((item) => item.source === sourceTab) ?? [];
   const media = project?.media ?? null;
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
   const sourceConnected = project?.sourceStatus === 'connected';
-  const validClip = Boolean(media && clip &&
+  const sourceDuration = sourceTab === 'youtube' ? draft?.youtubeDuration ?? null : media?.duration ?? null;
+  const validClip = Boolean(clip && sourceDuration !== null &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
-    clip.start >= 0 && clip.end > clip.start + 0.199 && clip.end <= media.duration + 0.02);
-  const canRender = validClip && sourceConnected && sourceTab === 'local' && !rendering && !busy && !publishingBusy;
+    clip.start >= 0 && clip.end >= clip.start + 0.2 && clip.end <= sourceDuration + 0.02);
+  const canRender = validClip && clip?.source === 'local' && sourceConnected && sourceTab === 'local' && !rendering && !busy && !publishingBusy;
   const publishReady = publishing?.artifact?.projectId === project?.id &&
     publishing?.artifact?.clipId === clip?.id &&
     publishing?.artifact?.start === clip?.start &&
@@ -73,6 +78,8 @@ function App() {
     setProject(view);
     setDraft(edits);
     setDirty(false);
+    setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.youtubeUrl ? 'youtube' : 'local'));
+    setLoopClip(false);
     setPlayhead(view.clips.find((c) => c.id === view.selectedClipId)?.start ?? 0);
     setProgress({ percent: 0, seconds: 0 });
     setStatus(`프로젝트: ${view.title} · ${view.clips.length}개 클립`);
@@ -155,6 +162,7 @@ function App() {
     const old = draftRef.current;
     if (!old || publishingBusy) return;
     const next = update(old);
+    if (next === old) return;
     draftRef.current = next;
     dirtyRef.current = true;
     editVersion.current += 1;
@@ -209,7 +217,6 @@ function App() {
       await flushEdits();
       const opened = await window.shortfab.openProject(id);
       applyView(opened);
-      setSourceTab('local');
       await refreshProjects();
       await refreshPublishing();
     } catch (cause) {
@@ -226,7 +233,6 @@ function App() {
       await flushEdits();
       const created = await window.shortfab.createProject();
       applyView(created);
-      setSourceTab('local');
       await refreshProjects();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -255,6 +261,36 @@ function App() {
     }
   }
 
+  function selectSource(next: SourceTab) {
+    setSourceTab(next);
+    setPlayhead(0);
+    changeDraft((current) => {
+      const first = current.clips.find((item) => item.source === next)?.id;
+      return first && first !== current.selectedClipId ? { ...current, selectedClipId: first } : current;
+    });
+  }
+
+  function setYoutubeUrl(value: string) {
+    changeDraft((current) => {
+      const previous = youtubeVideoId(current.youtubeUrl);
+      const incoming = youtubeVideoId(value);
+      if (previous === incoming) return { ...current, youtubeUrl: value };
+      const clips = current.clips.filter((item) => item.source !== 'youtube');
+      return { ...current, youtubeUrl: value, youtubeDuration: null, clips,
+        selectedClipId: clips.find((item) => item.id === current.selectedClipId)?.id ?? clips[0]?.id ?? null };
+    });
+    setPlayhead(0);
+  }
+
+  function onYoutubeDuration(id: string, seconds: number) {
+    changeDraft((current) => {
+      if (youtubeVideoId(current.youtubeUrl) !== id ||
+          (current.youtubeDuration !== null && Math.abs(current.youtubeDuration - seconds) < 0.15) ||
+          current.clips.some((item) => item.source === 'youtube' && item.end > seconds + 0.02)) return current;
+      return { ...current, youtubeDuration: seconds };
+    });
+  }
+
   function updateClip(patch: Partial<ProjectClip>) {
     changeDraft((current) => ({
       ...current,
@@ -264,12 +300,13 @@ function App() {
   }
 
   function addClip() {
-    if (!media || !draft || busy || rendering) return;
-    const from = clip && clip.end + 0.2 <= media.duration ? clip.end : clip?.start ?? 0;
-    const to = Math.min(media.duration, from + 30);
+    if (sourceDuration === null || !draft || busy || rendering ||
+      (sourceTab === 'youtube' && !youtubeId) || (sourceTab === 'local' && !sourceConnected)) return;
+    const from = clip && clip.end + 0.2 <= sourceDuration ? clip.end : clip?.start ?? 0;
+    const to = Math.min(sourceDuration, from + 30);
     if (to - from < 0.2 || draft.clips.length >= 100) return;
     const newClip: ProjectClip = {
-      id: crypto.randomUUID(), title: `클립 ${draft.clips.length + 1}`,
+      source: sourceTab, id: crypto.randomUUID(), title: `클립 ${draft.clips.length + 1}`,
       start: from, end: to, width: clip?.width ?? 720,
     };
     changeDraft((current) => ({
@@ -290,13 +327,20 @@ function App() {
   }
 
   function moveTo(time: number) {
-    if (!media) return;
-    const clamped = Math.min(media.duration, Math.max(0, time));
+    if (sourceDuration === null) return;
+    const clamped = Math.min(sourceDuration, Math.max(0, time));
     setPlayhead(clamped);
-    if (videoRef.current) videoRef.current.currentTime = clamped;
+    if (sourceTab === 'youtube') youtubePlayer.current?.seek(clamped);
+    else if (videoRef.current) videoRef.current.currentTime = clamped;
   }
 
   async function playClip() {
+    if (sourceTab === 'youtube') {
+      if (!clip) return;
+      youtubePlayer.current?.seek(clip.start);
+      youtubePlayer.current?.play();
+      return;
+    }
     const video = videoRef.current;
     if (!video || !clip) return;
     video.currentTime = clip.start;
@@ -333,7 +377,7 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">S/</span><div><strong>ShortFab</strong><small>숏컷공장 · Phase 2</small></div></div>
+        <div className="brand"><span className="brand-mark">S/</span><div><strong>ShortFab</strong><small>숏컷공장 · YouTube-first</small></div></div>
         <span className="stage-label">LOCAL FIRST · EXPORT + YOUTUBE</span>
       </header>
 
@@ -356,8 +400,8 @@ function App() {
           <input id="project-title" value={draft?.title ?? ''} disabled={!draft || busy || rendering}
             onChange={(event) => changeDraft((current) => ({ ...current, title: event.target.value }))} />
           <div className="tab-group source-tabs">
-            <button className={sourceTab === 'local' ? 'active' : ''} onClick={() => setSourceTab('local')}>로컬 원본</button>
-            <button className={sourceTab === 'youtube' ? 'active' : ''} onClick={() => setSourceTab('youtube')}>YouTube 탐색</button>
+            <button className={sourceTab === 'local' ? 'active' : ''} onClick={() => selectSource('local')}>로컬 원본</button>
+            <button className={sourceTab === 'youtube' ? 'active' : ''} onClick={() => selectSource('youtube')}>YouTube 탐색</button>
           </div>
           {sourceTab === 'local' ? (
             <section className="pane">
@@ -376,11 +420,17 @@ function App() {
             </section>
           ) : (
             <section className="pane">
-              <label htmlFor="youtube-url">YouTube URL (탐색 전용)</label>
+              <label htmlFor="youtube-url">YouTube URL</label>
               <input id="youtube-url" value={draft?.youtubeUrl ?? ''} disabled={!draft || busy || rendering}
-                onChange={(event) => changeDraft((current) => ({ ...current, youtubeUrl: event.target.value }))}
+                onChange={(event) => setYoutubeUrl(event.target.value)}
                 placeholder="https://youtu.be/…" />
-              <p className="hint">공식 임베드만 사용합니다. URL만으로 렌더할 수 없으며, 실제 영상 파일은 별도로 연결해야 합니다.</p>
+              <p className="hint">공식 플레이어에서 영상을 탐색하고 원하는 구간을 클립 후보로 저장하세요.</p>
+              {youtubeId && <div className="source-details" role="status">
+                <strong>PREVIEW ONLY · 미디어 미확보</strong>
+                <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
+                <span>이 링크만으로 MP4를 만들 수 없습니다. 권한 있는 렌더 원본을 연결하는 기능은 YF-1에서 제공합니다.</span>
+                <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">원본 YouTube에서 열기 ↗</a>
+              </div>}
               {draft?.youtubeUrl && !youtubeId && <p className="warning">올바른 YouTube 링크를 입력해 주세요.</p>}
             </section>
           )}
@@ -389,16 +439,17 @@ function App() {
           <p className="eyebrow">02 — CLIP LIBRARY</p>
           <h2>클립 후보</h2>
           <div className="clip-choices">
-            {draft?.clips.map((item) => <button key={item.id}
+            {visibleClips.map((item) => <button key={item.id}
               className={draft.selectedClipId === item.id ? 'clip-choice selected' : 'clip-choice'}
               disabled={busy || rendering}
               onClick={() => { changeDraft((current) => ({ ...current, selectedClipId: item.id })); moveTo(item.start); }}>
               <strong>{item.title}</strong><small>{formatTime(item.start)}–{formatTime(item.end)}</small>
             </button>)}
-            {!draft?.clips.length && <p className="hint">원본을 연결하면 첫 클립이 생성됩니다.</p>}
+            {!visibleClips.length && <p className="hint">{sourceTab === 'youtube' ? '영상 길이를 불러온 뒤 후보를 추가하세요.' : '원본을 연결하면 첫 클립이 생성됩니다.'}</p>}
           </div>
           <div className="clip-actions">
-            <button disabled={!sourceConnected || busy || rendering || !media || (draft?.clips.length ?? 0) >= 100} onClick={addClip}>+ 후보 추가</button>
+            <button disabled={sourceDuration === null || busy || rendering ||
+              (sourceTab === 'local' && !sourceConnected) || (draft?.clips.length ?? 0) >= 100} onClick={addClip}>+ 후보 추가</button>
             <button disabled={!clip || busy || rendering} onClick={removeClip}>선택 삭제</button>
           </div>
 
@@ -413,12 +464,14 @@ function App() {
                 onChange={(event) => updateClip({ end: Number(event.target.value) })} /></label>
             </div>
             <div className="marker-actions">
-              <button disabled={!sourceConnected || busy || rendering} onClick={() => updateClip({ start: Math.min(playhead, clip.end) })}>현재 시각 → IN</button>
-              <button disabled={!sourceConnected || busy || rendering} onClick={() => updateClip({ end: Math.max(playhead, clip.start) })}>현재 시각 → OUT</button>
+              <button disabled={sourceDuration === null || busy || rendering} onClick={() => updateClip({ start: Math.min(playhead, clip.end - 0.2) })}>현재 시각 → IN</button>
+              <button disabled={sourceDuration === null || busy || rendering} onClick={() => updateClip({ end: Math.max(playhead, clip.start + 0.2) })}>현재 시각 → OUT</button>
             </div>
             <div className="duration"><span>선택 구간</span><strong>{formatTime(clip.end - clip.start)}</strong></div>
-            <button className="secondary full" disabled={!validClip || !sourceConnected || busy || rendering || sourceTab !== 'local'}
+            <button className="secondary full" disabled={!validClip || (sourceTab === 'local' && !sourceConnected) || busy || rendering}
               onClick={() => void playClip()}>▶ 선택 구간 재생</button>
+            {sourceTab === 'youtube' && <label className="loop-option"><input type="checkbox" checked={loopClip}
+              onChange={(event) => setLoopClip(event.target.checked)} /> 선택 구간 반복 재생</label>}
             {!validClip && <p className="warning">유효한 IN/OUT 구간을 지정해 주세요.</p>}
           </>}
           <div className="section-rule" />
@@ -435,12 +488,13 @@ function App() {
         </aside>
 
         <main className="preview-area">
-          <div className="preview-heading"><div><p className="eyebrow">CANVAS PREVIEW</p><h2>출력 프레임 미리보기</h2></div><span>9:16</span></div>
+          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? 'YouTube 원본 구간 탐색' : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'PREVIEW ONLY' : '9:16'}</span></div>
           <div className="preview-stage">
             <div className="portrait">
               {sourceTab === 'youtube' && youtubeId ? (
-                <iframe title="YouTube official player" src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
-                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                <YouTubePreview key={youtubeId} ref={youtubePlayer} videoId={youtubeId}
+                  start={clip?.start ?? null} end={clip?.end ?? null} loop={loopClip}
+                  onTime={setPlayhead} onDuration={onYoutubeDuration} />
               ) : media && sourceTab === 'local' && sourceConnected ? (
                 <video key={`${project?.id}-${media.id}-${media.previewUrl}`} ref={videoRef}
                   src={media.previewUrl} controls playsInline preload="metadata"
@@ -452,15 +506,15 @@ function App() {
               ) : (
                 <div className="empty-preview"><span className="film-symbol">▣</span>
                   <strong>YOUR SHORT STARTS HERE</strong>
-                  <small>{project?.sourceStatus === 'missing' ? '원본을 재연결해 주세요' : '로컬 영상을 선택하세요'}</small>
+                  <small>{sourceTab === 'youtube' ? 'YouTube URL을 입력해 주세요' : project?.sourceStatus === 'missing' ? '원본을 재연결해 주세요' : '로컬 영상을 선택하세요'}</small>
                 </div>
               )}
             </div>
           </div>
           <div className="timeline">
-            <div className="timeline-top"><span>원본 타임라인</span><span>{media ? formatTime(media.duration) : '00:00'}</span></div>
-            <input aria-label="영상 위치" type="range" min="0" max={media?.duration ?? 30} step="0.1"
-              disabled={!sourceConnected || sourceTab !== 'local'} value={playhead}
+            <div className="timeline-top"><span>원본 타임라인</span><span>{sourceDuration === null ? '--:--' : formatTime(sourceDuration)}</span></div>
+            <input aria-label="영상 위치" type="range" min="0" max={Math.max(sourceDuration ?? 30, 0.2)} step="0.1"
+              disabled={sourceDuration === null || (sourceTab === 'local' && !sourceConnected)} value={Math.min(playhead, sourceDuration ?? 30)}
               onChange={(event) => moveTo(Number(event.target.value))} />
             <div className="timeline-markers">
               <span>IN {formatTime(clip?.start ?? 0)}</span><span>OUT {formatTime(clip?.end ?? 0)}</span>
@@ -495,6 +549,7 @@ function App() {
           <div className="export-spec"><span>해상도</span><strong>{clip ? `${clip.width} × ${clip.width * 16 / 9}` : '—'}</strong></div>
           <div className="export-spec"><span>프레임</span><strong>30 FPS</strong></div>
           <div className="export-spec"><span>클립 길이</span><strong>{formatTime(clip ? clip.end - clip.start : 0)}</strong></div>
+          {sourceTab === 'youtube' && <p className="warning">PREVIEW ONLY · URL 마커는 저장됩니다. MP4 출력에는 재편집 권한과 연결된 실제 미디어가 필요합니다.</p>}
           <button className="primary full export-button" disabled={!canRender} onClick={() => void renderClip()}>
             {rendering ? '렌더링 중…' : '선택 클립 MP4 익스포트'}
           </button>
