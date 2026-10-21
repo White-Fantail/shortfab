@@ -126,3 +126,8 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 ## 승인 클라우드 원본 경계 (YF-1, 2026-10-22)
 
 권리자 제공 직접 HTTPS 미디어만 `SHORTFAB_APPROVED_SOURCE_HOSTS` exact 호스트 allowlist와 사전 제공 SHA-256을 조건으로 허용합니다. Electron의 `electron/cloud.ts`는 메인 프로세스에서 DNS 공개 IPv4 IP 고정·TLS·리다이렉트 금지·시간/크기 제한·응답 크기/해시 확인을 수행하고, 다운로드 완료 후 기존 로컬 권한/FFprobe/타임 오프셋 검증 체계로 연결합니다. Renderer와 프로젝트 데이터에는 원격 서명 URL을 저장하지 않습니다. 파트너 API 인증/갱신/권리 매니페스트 검증과 YouTube 영상 프레임 동일성은 아직 미구현이며, 단순 해시 검증을 그것의 대체로 취급하지 않습니다.
+
+
+## YF-2 파트너 원본 조회 데이터 경계
+
+`PartnerCatalog (Electron main)` → allowlist HTTPS GET(videoId만 전송) → Ed25519 verified offer `{videoId, downloadUrl, sha256, rights, validUntil}` → `AuthorizedSources.createBinding` → `StoredMediaBinding`(main-only path) → 기존 프로젝트/FFmpeg 클립 렌더. 전송 URL의 쿼리 토큰/서명 유효기간은 로컬 JSON으로 보존하지 않으며, 사용자 제공 원본이나 임의 YouTube 공개 URL에서 스트림을 추출하지 않습니다. 파트너 공개키를 **운영자가 고정한 키**로만 받아야 하며 partner-supplied 키를 신뢰하지 않습니다. [상세](PARTNER_CATALOG.md).
