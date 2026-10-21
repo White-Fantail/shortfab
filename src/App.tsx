@@ -31,6 +31,9 @@ function App() {
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudError, setCloudError] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [partnerConfigured, setPartnerConfigured] = useState(false);
+  const [partnerBusy, setPartnerBusy] = useState(false);
+  const [partnerError, setPartnerError] = useState('');
   const [rightsForm, setRightsForm] = useState<BindSourceRequest>({
     rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
     allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
@@ -96,6 +99,7 @@ function App() {
     setDraft(edits);
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
     setCloudError('');
+    setPartnerError('');
     const linkedRights = view.youtubeSource.binding;
     setRightsForm(linkedRights ? {
       rightsHolder: linkedRights.rights.rightsHolder,
@@ -170,6 +174,11 @@ function App() {
     const unsubscribe = window.shortfab?.onProgress((value) => {
       if (live) setProgress(value);
     });
+    if (window.shortfab) {
+      void window.shortfab.partnerCatalogStatus()
+        .then(({ configured }) => { if (live) setPartnerConfigured(configured); })
+        .catch(() => { if (live) setPartnerConfigured(false); });
+    }
     if (!window.shortfab) {
       setError('프로젝트 저장과 렌더는 Electron 데스크톱 앱에서만 실행됩니다. npm run dev를 사용하세요.');
     } else {
@@ -294,6 +303,26 @@ function App() {
     }
   }
 
+  async function discoverPartnerSource() {
+    if (!window.shortfab || !partnerConfigured || !youtubeId ||
+        !draft?.youtubeDuration || busy || rendering || publishingBusy) return;
+    setBusy(true);
+    setPartnerBusy(true);
+    setPartnerError('');
+    try {
+      await flushEdits();
+      const updated = await window.shortfab.bindPartnerSource();
+      applyView(updated);
+      setSourceTab('youtube');
+      setStatus('파트너 서명, 영상 ID, 이용 권한 및 SHA-256을 검증해 원본을 자동 연결했습니다.');
+    } catch (cause) {
+      setPartnerError(cause instanceof Error ? cause.message : '파트너 원본 탐색에 실패했습니다.');
+    } finally {
+      setBusy(false);
+      setPartnerBusy(false);
+    }
+  }
+
   async function bindApprovedCloudSource() {
     if (!window.shortfab || !youtubeId || !draft?.youtubeDuration || busy || rendering || publishingBusy) return;
     setBusy(true);
@@ -342,6 +371,7 @@ function App() {
   function setYoutubeUrl(value: string) {
     setCloudUrl('');
     setCloudError('');
+    setPartnerError('');
     if (youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== youtubeVideoId(value)) {
       // Never carry declarations of one video's rights across to another video ID.
       setRightsForm({
@@ -516,6 +546,18 @@ function App() {
                   <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">YouTube에서 원본 보기 ↗</a>
                 </div>
                 <div className="source-binding">
+                  <div className="source-partner">
+                    <strong>파트너 원본 자동 탐색</strong>
+                    <p className="hint">현재 YouTube 영상 ID를 권리자 카탈로그에서 조회합니다. 검증된 서명·사용 권한이 있는 원본만 다운로드합니다.</p>
+                    <button className="primary full"
+                      disabled={!partnerConfigured || !draft?.youtubeDuration || busy || rendering || publishingBusy}
+                      onClick={() => void discoverPartnerSource()}>
+                      {partnerBusy ? '파트너 원본 검색·검증 중…' : partnerConfigured ?
+                        'YouTube ID로 승인 원본 자동 찾기' : '파트너 카탈로그 연결 필요'}
+                    </button>
+                    {!partnerConfigured && <p className="hint">파트너 카탈로그 주소와 서명 공개키가 설정된 앱에서 활성화됩니다.</p>}
+                    {partnerError && <p className="warning" role="alert">{partnerError}</p>}
+                  </div>
                   <strong>허가받은 인코딩 원본 연결</strong>
                   <p className="hint">권리자가 제공한 영상 파일을 연결합니다. 파일은 로컬에 보관되며 같은 YouTube ID로 다시 찾을 수 있습니다.</p>
                   <label htmlFor="rights-holder">권리자 / 계약 상대방</label>
