@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AuthorizedSources } from './sources.js';
+import { configuredSourceHosts, importApprovedFile } from './cloud.js';
+import { validateApprovedCloudSource } from '../src/shared/cloud.js';
 import { youtubeVideoId } from '../src/shared/contracts.js';
 import { mappedClipRange, resolveYouTubeSource, validateBindSourceRequest,
   type BindSourceRequest, type StoredMediaBinding } from '../src/shared/sources.js';
@@ -248,6 +250,34 @@ export class ProjectStore {
     this.active = updated;
     this.youtubeVerified = true;
     return this.view();
+  }
+
+  async bindCloudSource(payload: unknown): Promise<ProjectView> {
+    if (!this.active) throw new Error('프로젝트를 먼저 열어 주세요.');
+    const videoId = youtubeVideoId(this.active.youtubeUrl);
+    const duration = this.active.youtubeDuration;
+    if (!videoId || !duration) throw new Error('YouTube URL과 영상 길이를 먼저 확인해 주세요.');
+    const request = validateApprovedCloudSource(payload, configuredSourceHosts());
+    const rights = validateBindSourceRequest(request.rights);
+    // A mandatory provider-supplied checksum prevents accepting unpinned remote media.
+    if (!rights.expectedSha256) throw new Error('원격 원본 SHA-256이 필요합니다.');
+    const localPath = await importApprovedFile(request.directUrl, rights.expectedSha256);
+    try {
+      const binding = await this.sources.createBinding(
+        videoId, localPath, rights, duration, 'partner_file');
+      const updated: ProjectRecord = {
+        ...this.active, youtubeBinding: binding,
+        revision: this.active.revision + 1, updatedAt: new Date().toISOString(),
+      };
+      await this.sources.register(binding);
+      await this.write(updated);
+      this.active = updated;
+      this.youtubeVerified = true;
+      return this.view();
+    } catch (cause) {
+      await rm(localPath, { force: true }).catch(() => {});
+      throw cause;
+    }
   }
 
   async attachMedia(filePath: string, reconnect: boolean): Promise<ProjectView> {
