@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AuthorizedSources } from './sources.js';
 import { configuredSourceHosts, importApprovedFile } from './cloud.js';
+import { findApprovedPartnerMedia } from './partner.js';
 import { validateApprovedCloudSource } from '../src/shared/cloud.js';
 import { youtubeVideoId } from '../src/shared/contracts.js';
 import { mappedClipRange, resolveYouTubeSource, validateBindSourceRequest,
@@ -276,6 +277,35 @@ export class ProjectStore {
       return this.view();
     } catch (cause) {
       await rm(localPath, { force: true }).catch(() => {});
+      throw cause;
+    }
+  }
+
+  async bindPartnerSource(): Promise<ProjectView> {
+    if (!this.active) throw new Error('프로젝트를 먼저 열어 주세요.');
+    const videoId = youtubeVideoId(this.active.youtubeUrl);
+    const duration = this.active.youtubeDuration;
+    if (!videoId || !duration) throw new Error('YouTube 영상 길이를 불러온 뒤 시도해 주세요.');
+    const verified = await findApprovedPartnerMedia(videoId);
+    if (!verified) {
+      throw new Error('이 YouTube 영상 ID에 연결된 파트너 승인 원본을 찾지 못했습니다.');
+    }
+    // URL/hash/license come exclusively from a signed, time-limited partner offer.
+    const file = await importApprovedFile(verified.offer.downloadUrl, verified.offer.sha256);
+    try {
+      const binding = await this.sources.createBinding(
+        videoId, file, verified.rights, duration, 'partner_file');
+      const record: ProjectRecord = {
+        ...this.active, youtubeBinding: binding,
+        revision: this.active.revision + 1, updatedAt: new Date().toISOString(),
+      };
+      await this.sources.register(binding);
+      await this.write(record);
+      this.active = record;
+      this.youtubeVerified = true;
+      return this.view();
+    } catch (cause) {
+      await rm(file, { force: true }).catch(() => {});
       throw cause;
     }
   }
