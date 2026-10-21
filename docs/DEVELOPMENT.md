@@ -67,6 +67,16 @@ npm run build
 - YouTube 게시 작업은 최대 8 MiB씩 순차 전송, 중단 시 기존 세션 확인, 수동 재개, 영상 ID 후속 상태 확인으로 설계했습니다. 실계정 업로드 및 OS별 검증은 아직 필요합니다.
 - [Phase 2 설정 및 수용 검사](PHASE2_YOUTUBE.md)
 
+## 최우선 신규 개발: YouTube URL → 실제 숏폼 (미구현)
+
+- 로컬 영상으로 성공한 Phase 0·1 테스트는 **기존 YouTube 영상을 직접 파일 보유 없이 클리핑**하려는 사용자 요구의 충분조건이 아닙니다.
+- **YF-0:** 기본 소스 탭을 YouTube로 변경, IFrame Player API \`getCurrentTime\`/\`seekTo\`·IN/OUT/루프·후보 마커 저장 및 재열기를 구현합니다. URL만 있으면 preview-only로 표시합니다.
+- **YF-1:** \`YouTubeReference\`, \`RightsGrant\`, \`MediaBinding\`, \`SourceResolver\`를 도입해 권한 있는 권리자 제공 원본/스토리지 자산을 YouTube videoId에 연결합니다. 소스 fingerprint/타임 오프셋 검증 후 기존 FFmpeg 파이프라인을 사용합니다.
+- **YF-1 테스트:** 직접 촬영하지 않은 YouTube 테스트 영상의 URL + 별도로 승인된 해당 원본 자산 1개로 시작하여 3개 클립을 MP4로 내보냅니다. 원본 미확보/권한 만료/다른 영상 연결 시 작업이 차단되어야 합니다.
+- **YF-2:** 파일 수동 선택 없이 파트너 제공 파일을 URL에 자동 연결하는 흐름·권리 계약 증빙 저장. 3개 클립 후보/실패한 소스 연결 프로젝트를 재열어도 작업이 복원되어야 합니다.
+- \`yt-dlp\`는 현재 공식 지원/라이선스 상태로 배포 경로로 확정되지 않았으며, 약관을 위반할 수 있는 다운로드·인증 우회를 기본 기능으로 넣지 않습니다.
+- 상세 스펙과 정책 링크: [YOUTUBE_FIRST_WORKFLOW.md](YOUTUBE_FIRST_WORKFLOW.md) / [ADR-0002](adr/0002-youtube-first-source-acquisition.md).
+
 ## 다음 구현
 
 Phase 2 Google 인증/실제 비공개 업로드/상태·재개 통합 테스트와 Phase 1 저장/재열기 앱 통합 검증, YouTube IFrame API 타임코드 탐색, FFmpeg 배포 검증. 이후 Composition 스타일·자막·오디오·CTA·버전 스냅샷을 개발합니다.
