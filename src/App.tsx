@@ -28,6 +28,9 @@ function App() {
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>('youtube');
   const [loopClip, setLoopClip] = useState(false);
+  const [cloudUrl, setCloudUrl] = useState('');
+  const [cloudError, setCloudError] = useState('');
+  const [cloudBusy, setCloudBusy] = useState(false);
   const [rightsForm, setRightsForm] = useState<BindSourceRequest>({
     rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
     allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
@@ -289,6 +292,26 @@ function App() {
     }
   }
 
+  async function bindApprovedCloudSource() {
+    if (!window.shortfab || !youtubeId || !draft?.youtubeDuration || busy || rendering || publishingBusy) return;
+    setBusy(true);
+    setCloudBusy(true);
+    setCloudError('');
+    try {
+      await flushEdits();
+      const updated = await window.shortfab.bindCloudSource({ directUrl: cloudUrl.trim(), rights: rightsForm });
+      applyView(updated);
+      setCloudUrl(''); // Signed URL may contain a short-lived token; do not persist it.
+      setSourceTab('youtube');
+      setStatus('허용된 저장소의 원본 SHA-256 및 파일 연결을 확인했습니다.');
+    } catch (cause) {
+      setCloudError(cause instanceof Error ? cause.message : '원격 원본 연결에 실패했습니다.');
+    } finally {
+      setCloudBusy(false);
+      setBusy(false);
+    }
+  }
+
   async function bindAuthorizedSource() {
     if (!window.shortfab || !youtubeId || !draft?.youtubeDuration || rendering || busy || publishingBusy) return;
     setBusy(true);
@@ -315,6 +338,8 @@ function App() {
   }
 
   function setYoutubeUrl(value: string) {
+    setCloudUrl('');
+    setCloudError('');
     if (youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== youtubeVideoId(value)) {
       // Never carry declarations of one video's rights across to another video ID.
       setRightsForm({
@@ -518,6 +543,23 @@ function App() {
                     onClick={() => void bindAuthorizedSource()}>
                     {linkedAsset ? '연결된 원본 다시 선택' : '권리자 원본 파일 선택 및 연결'}
                   </button>
+                  <div className="source-cloud">
+                    <strong>승인된 클라우드 원본 가져오기</strong>
+                    <p className="hint">앱 운영자가 등록한 HTTPS 미디어 호스트의 직접 파일 링크만 지원합니다. 이 링크는 로컬 프로젝트에 저장하지 않습니다.</p>
+                    <label htmlFor="source-cloud-url">클라우드 원본 직접 링크</label>
+                    <input id="source-cloud-url" type="url" value={cloudUrl} disabled={busy || rendering}
+                      placeholder="https://media.example.com/asset.mp4?signature=..."
+                      onChange={e => { setCloudUrl(e.target.value); setCloudError(''); }} />
+                    <p className="hint">클라우드 연결 시 위 SHA-256 64자 체크섬은 필수입니다. 사용 권한과 증빙은 로컬 파일 연결과 동일하게 적용됩니다.</p>
+                    <button className="secondary full" disabled={busy || rendering || publishingBusy ||
+                      !draft?.youtubeDuration || !cloudUrl.trim() || !/^[a-f0-9]{64}$/i.test(rightsForm.expectedSha256 ?? '') ||
+                      !rightsForm.allowClip || !rightsForm.allowDerivativeEdit ||
+                      !rightsForm.rightsHolder.trim() || !rightsForm.evidenceRef.trim()}
+                      onClick={() => void bindApprovedCloudSource()}>
+                      {cloudBusy ? '원본 검사 및 가져오는 중…' : '클라우드 원본 다운로드·검증·연결'}
+                    </button>
+                    {cloudError && <p className="warning" role="alert">{cloudError}</p>}
+                  </div>
                 </div>
               </>}
               {draft?.youtubeUrl && !youtubeId && <p className="warning">올바른 YouTube 링크를 입력해 주세요.</p>}
