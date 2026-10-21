@@ -1,6 +1,9 @@
 import { youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
 
+export type ClipSource = 'local' | 'youtube';
+
 export interface ProjectClip {
+  source: ClipSource;
   id: string;
   title: string;
   start: number;
@@ -28,6 +31,7 @@ export interface ProjectRecord {
   revision: number;
   asset: StoredAsset | null;
   youtubeUrl: string;
+  youtubeDuration: number | null; // IFrame API metadata, not a renderable asset.
   clips: ProjectClip[];
   selectedClipId: string | null;
 }
@@ -49,7 +53,7 @@ export interface ProjectSummary {
 }
 
 export type ProjectEdits = Pick<ProjectRecord,
-  'id' | 'revision' | 'title' | 'youtubeUrl' | 'clips' | 'selectedClipId'>;
+  'id' | 'revision' | 'title' | 'youtubeUrl' | 'youtubeDuration' | 'clips' | 'selectedClipId'>;
 
 export const isProjectId = (id: unknown): id is string =>
   typeof id === 'string' &&
@@ -68,22 +72,31 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     (value.youtubeUrl.trim() && !youtubeVideoId(value.youtubeUrl.trim()))) {
     throw new Error('YouTube 주소가 올바르지 않습니다.');
   }
+  const youtubeDuration = value.youtubeDuration ?? null;
+  if (youtubeDuration !== null && (!Number.isFinite(youtubeDuration) || youtubeDuration <= 0 || youtubeDuration > 604800 || !youtubeVideoId(value.youtubeUrl?.trim() ?? ''))) {
+    throw new Error('YouTube 영상 길이가 올바르지 않습니다.');
+  }
   if (!Array.isArray(value.clips) || value.clips.length > 100) {
     throw new Error('클립은 최대 100개까지 저장할 수 있습니다.');
   }
   const ids = new Set<string>();
   const clips: ProjectClip[] = value.clips.map((clip) => {
-    if (!clip || !isProjectId(clip.id) || ids.has(clip.id) ||
+    const source = clip?.source ?? 'local'; // Older projects have local clips with no discriminator.
+    const limit = source === 'youtube' ? youtubeDuration : sourceDuration;
+    if (!clip || (source !== 'youtube' && source !== 'local') ||
+      (source === 'youtube' && (!youtubeVideoId(value.youtubeUrl!) || youtubeDuration === null)) ||
+      (source === 'local' && sourceDuration === null) ||
+      !isProjectId(clip.id) || ids.has(clip.id) ||
       typeof clip.title !== 'string' || !clip.title.trim() || clip.title.length > 100 ||
       !Number.isFinite(clip.start) || !Number.isFinite(clip.end) ||
       clip.start < 0 || clip.end - clip.start < 0.2 ||
-      (sourceDuration !== null && clip.end > sourceDuration + 0.02) ||
+      (limit !== null && clip.end > limit + 0.02) ||
       (clip.width !== 720 && clip.width !== 1080)) {
       throw new Error('클립 이름, 구간 또는 해상도를 확인해 주세요.');
     }
     ids.add(clip.id);
     return {
-      id: clip.id, title: clip.title.trim(),
+      source, id: clip.id, title: clip.title.trim(),
       start: clip.start, end: clip.end, width: clip.width,
     };
   });
@@ -94,12 +107,9 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
   if (value.selectedClipId === undefined || (clips.length && value.selectedClipId === null)) {
     throw new Error('저장할 클립을 선택해 주세요.');
   }
-  if (sourceDuration === null && clips.length) {
-    throw new Error('영상 원본을 먼저 연결해 주세요.');
-  }
   return {
     id: value.id, revision: value.revision!, title: value.title.trim(),
-    youtubeUrl: value.youtubeUrl.trim(), clips,
+    youtubeUrl: value.youtubeUrl.trim(), youtubeDuration, clips,
     selectedClipId: value.selectedClipId,
   };
 }

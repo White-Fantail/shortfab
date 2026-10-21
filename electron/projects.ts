@@ -29,7 +29,10 @@ function assertRecord(input: unknown, id: string): ProjectRecord {
     ))) {
     throw new Error('프로젝트 스키마 또는 원본 메타데이터가 올바르지 않습니다.');
   }
-  const edits = validateProjectEdits(candidate, candidate.asset?.duration ?? null);
+  const edits = validateProjectEdits({ ...candidate,
+    youtubeDuration: candidate.youtubeDuration ?? null,
+    clips: candidate.clips?.map((clip) => ({ ...clip, source: clip.source ?? 'local' })),
+  }, candidate.asset?.duration ?? null);
   return { ...candidate, ...edits, schemaVersion: 1 } as ProjectRecord;
 }
 
@@ -124,7 +127,7 @@ export class ProjectStore {
     const record: ProjectRecord = {
       schemaVersion: 1, id: randomUUID(), title: '새 프로젝트',
       createdAt: now, updatedAt: now, revision: 0,
-      asset: null, youtubeUrl: '', clips: [], selectedClipId: null,
+      asset: null, youtubeUrl: '', youtubeDuration: null, clips: [], selectedClipId: null,
     };
     await this.write(record);
     this.active = record;
@@ -187,13 +190,17 @@ export class ProjectStore {
       localPath: filePath, ...probed, sizeBytes: checked.size,
     };
     const initialClip: ProjectClip = {
-      id: randomUUID(), title: '클립 1', start: 0,
+      source: 'local', id: randomUUID(), title: '클립 1', start: 0,
       end: Math.min(30, probed.duration), width: 720,
     };
     const updated: ProjectRecord = {
       ...this.active, asset,
-      clips: reconnect ? this.active.clips : probed.duration >= 0.2 ? [initialClip] : [],
-      selectedClipId: reconnect ? this.active.selectedClipId : probed.duration >= 0.2 ? initialClip.id : null,
+      clips: reconnect ? this.active.clips : [
+        ...this.active.clips.filter((clip) => clip.source === 'youtube'),
+        ...(probed.duration >= 0.2 ? [initialClip] : []),
+      ],
+      selectedClipId: reconnect ? this.active.selectedClipId :
+        probed.duration >= 0.2 ? initialClip.id : this.active.clips.find((clip) => clip.source === 'youtube')?.id ?? null,
       updatedAt: new Date().toISOString(), revision: this.active.revision + 1,
     };
     await this.write(updated);

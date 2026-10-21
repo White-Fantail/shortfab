@@ -160,7 +160,7 @@ app.whenReady().then(() => {
     if (request.sourceId !== source.id) throw new Error('원본이 변경되었습니다. 다시 선택하세요.');
     const activeClip = projects.activeClip;
     const projectId = projects.activeProjectId;
-    if (!projectId || !activeClip || activeClip.start !== request.start ||
+    if (!projectId || !activeClip || activeClip.source !== 'local' || activeClip.start !== request.start ||
       activeClip.end !== request.end || activeClip.width !== request.width) {
       throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
     }

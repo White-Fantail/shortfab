@@ -5,7 +5,7 @@ const projectId = 'ad313e51-6d15-4b1f-bd85-7ef3b5dd50d0';
 const clipId = '9f60d241-05d2-42db-b332-973597172942';
 const valid = {
   id: projectId, revision: 0, title: '  여행 하이라이트  ',
-  youtubeUrl: 'https://youtu.be/abcdefghijk',
+  youtubeUrl: 'https://youtu.be/abcdefghijk', youtubeDuration: null,
   clips: [{ id: clipId, title: '인트로', start: 2, end: 32, width: 720 }],
   selectedClipId: clipId,
 };
@@ -15,6 +15,7 @@ describe('versioned project edit schema', () => {
     const result = validateProjectEdits(valid, 120);
     expect(result.title).toBe('여행 하이라이트');
     expect(result.clips[0].end).toBe(32);
+    expect(result.clips[0].source).toBe('local'); // Legacy clips migrated.
     expect('localPath' in result).toBe(false);
   });
 
@@ -38,5 +39,24 @@ describe('versioned project edit schema', () => {
       expect(() => validateProjectEdits(item, 120)).toThrow();
     }
     expect(() => validateProjectEdits(valid, null)).toThrow('원본');
+  });
+
+  it('saves YouTube-only preview ranges without a local source', () => {
+    const youtube = validateProjectEdits({
+      ...valid, youtubeDuration: 185, clips: [
+        { ...valid.clips[0], source: 'youtube', start: 10, end: 40 },
+      ],
+    }, null);
+    expect(youtube.clips[0].source).toBe('youtube');
+    expect(youtube.clips[0].start).toBe(10);
+    expect(youtube.youtubeDuration).toBe(185);
+  });
+
+  it('rejects YouTube clips without metadata or beyond duration, local clips without file', () => {
+    const clip = { ...valid.clips[0], source: 'youtube' };
+    expect(() => validateProjectEdits({ ...valid, clips: [clip] }, null)).toThrow();
+    expect(() => validateProjectEdits({ ...valid, youtubeDuration: 20, clips: [clip] }, null)).toThrow();
+    expect(() => validateProjectEdits({ ...valid, youtubeUrl: '', youtubeDuration: 120, clips: [clip] }, null)).toThrow();
+    expect(() => validateProjectEdits(valid, null)).toThrow();
   });
 });
