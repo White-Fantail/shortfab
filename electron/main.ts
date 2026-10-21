@@ -162,6 +162,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
     if (renderBusy || publisher.isBusy) throw new Error('이미 렌더링 또는 게시 작업 중입니다.');
+    renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
+    try {
     const activeClip = projects.activeClip;
     const projectId = projects.activeProjectId;
     if (!activeClip || !projectId) throw new Error('익스포트할 클립을 선택해 주세요.');
@@ -181,8 +183,6 @@ app.whenReady().then(() => {
       activeClip.width !== request.width) {
       throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
     }
-    renderBusy = true;
-    try {
       const base = parse(source.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
       const options: SaveDialogOptions = {
         title: 'MP4 내보내기',
