@@ -39,3 +39,12 @@
 ## 다음 작업
 
 승인된 클라우드 원본 어댑터와 인증·호스트 allowlist·리다이렉트/SSRF 검증, 권리자 videoId↔미디어 fingerprint 확인, 실제 3개 MP4 수용 시험은 아직 미구현/미검증입니다. YF-2는 파트너/권리자 카탈로그에서 파일을 *최초에도 직접 선택할 필요 없이* 자동 취득하는 기능으로 남습니다.
+
+
+## 승인된 HTTPS 원본 직접 연결 (YF-1 후속 구현)
+
+환경변수 `SHORTFAB_APPROVED_SOURCE_HOSTS=cdn.rightsholder.example,assets.partner.example`로 **실제 사용권 계약을 맺은 호스트**를 명시합니다. 앱 재시작 후 YouTube 링크와 재사용 허가를 입력하고, 권리자가 안내한 **직접 미디어 HTTPS URL**과 **권리자가 제공한 SHA-256**을 입력합니다. URL 확장자는 MP4/MOV/MKV/WEBM/M4V 중 하나여야 하고 호스트는 정확히 목록에 포함되어야 합니다. signed URL은 메모리에서만 사용하며 원본 경로만 앱 데이터 저장소에 보관됩니다. 권리자 제공 원본 URL이 곧 YouTube 원본을 뜻하지는 않습니다.
+
+메인 프로세스 `electron/cloud.ts`는 HTTPS TLS 검증, DNS 공개 IPv4 검사 및 접속 IP 고정, 30x 리다이렉트 거부, 120초 타임아웃, 2 GiB 크기 상한, content-type, Content-Length, 완료 SHA-256 검사를 수행합니다. 다운로드 성공 후 `electron/sources.ts`의 FFprobe/영상 범위 검사를 다시 수행하고 `provider: partner_file`로 등록합니다. 다운로드·검증 실패 시 작업 중 남은 임시 파일을 정리하고, 원본 누락 상태에서는 MP4를 출력하지 않습니다.
+
+현재 제공되는 것은 **사전 승인 호스트의 직접 파일 URL 경로**로, Google Drive/OAuth/파트너 카탈로그 API, 자동 서명 URL 갱신, 인증 토큰 갱신, 콘텐츠 fingerprint 검증, 실제 파트너 연동 E2E는 아직 없습니다. 테스트에서는 서명 URL의 query를 로깅하지 않는지, 리다이렉트 및 private IP가 차단되는지, 체크섬이 틀릴 때 캐시가 만들어지지 않는지 확인해야 합니다.
