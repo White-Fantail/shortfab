@@ -331,10 +331,12 @@ export class YouTubePublisher {
 
   private async authenticated(url: string, init: RequestInit): Promise<Response> {
     const token = await this.token();
-    return fetch(url, {
+    const response = await fetch(url, {
       ...init, headers: { ...init.headers, Authorization: 'Bearer ' + token },
       redirect: 'error', signal: AbortSignal.timeout(60_000),
     });
+    if (response.status === 401) this.access = null;
+    return response;
   }
 
   async start(metadataInput: unknown, projectId: string): Promise<PublishJobView> {
@@ -425,7 +427,10 @@ export class YouTubePublisher {
           await this.acceptVideo(job, sent.body);
           return;
         }
-        if (sent.status !== 308) throw apiError(sent.status);
+        if (sent.status !== 308) {
+          if (sent.status === 401) this.access = null;
+          throw apiError(sent.status);
+        }
         const next = nextUploadOffset(sent.status, sent.headers.get('range'), job.fileSize);
         if (next <= offset) throw new Error('YouTube 업로드가 진행되지 않습니다. 세션 상태를 다시 확인해 주세요.');
         offset = next;
