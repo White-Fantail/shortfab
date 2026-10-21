@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest';
+import { validateProjectEdits } from './projects';
+
+const projectId = 'ad313e51-6d15-4b1f-bd85-7ef3b5dd50d0';
+const clipId = '9f60d241-05d2-42db-b332-973597172942';
+const valid = {
+  id: projectId, revision: 0, title: '  여행 하이라이트  ',
+  youtubeUrl: 'https://youtu.be/abcdefghijk',
+  clips: [{ id: clipId, title: '인트로', start: 2, end: 32, width: 720 }],
+  selectedClipId: clipId,
+};
+
+describe('versioned project edit schema', () => {
+  it('roundtrips valid clips without filesystem paths', () => {
+    const result = validateProjectEdits(valid, 120);
+    expect(result.title).toBe('여행 하이라이트');
+    expect(result.clips[0].end).toBe(32);
+    expect('localPath' in result).toBe(false);
+  });
+
+  it('allows an empty project with no local source', () => {
+    expect(validateProjectEdits({
+      ...valid, youtubeUrl: '', clips: [], selectedClipId: null,
+    }, null).clips).toEqual([]);
+  });
+
+  it('rejects stale/invalid clip lists and dangerous source URLs', () => {
+    const badCases = [
+      { ...valid, clips: [{ ...valid.clips[0], end: 123 }] },
+      { ...valid, clips: [valid.clips[0], valid.clips[0]] },
+      { ...valid, selectedClipId: projectId },
+      { ...valid, clips: [{ ...valid.clips[0], start: 40, end: 2 }] },
+      { ...valid, clips: [{ ...valid.clips[0], width: 999 }] },
+      { ...valid, youtubeUrl: 'https://youtube.com.evil.test/watch?v=abcdefghijk' },
+      { ...valid, revision: -1 },
+    ];
+    for (const item of badCases) {
+      expect(() => validateProjectEdits(item, 120)).toThrow();
+    }
+    expect(() => validateProjectEdits(valid, null)).toThrow('원본');
+  });
+});

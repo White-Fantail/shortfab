@@ -1,34 +1,32 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron';
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron';
-import { randomUUID } from 'node:crypto';
 import { join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { probeMedia } from './media.js';
+import { ProjectStore } from './projects.js';
 import { RenderTask } from './render.js';
-import { validateRenderRequest, type MediaInfo, type RenderResult } from '../src/shared/contracts.js';
+import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'shortfab-media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
 ]);
 
 let mainWindow: BrowserWindow | null = null;
-let activeSource: { id: string; path: string; info: MediaInfo } | null = null;
+const projects = new ProjectStore();
 let currentTask: RenderTask | null = null;
 let renderBusy = false;
 
+function requireIdle(): void {
+  if (renderBusy) throw new Error('렌더링이 끝나면 프로젝트나 원본을 변경할 수 있습니다.');
+}
+
 function openWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 850,
-    minHeight: 620,
+    width: 1280, height: 860, minWidth: 850, minHeight: 620,
     title: 'ShortFab · 숏컷공장',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webSecurity: true,
+      contextIsolation: true, sandbox: true,
+      nodeIntegration: false, webSecurity: true,
     },
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -42,15 +40,24 @@ function openWindow(): void {
 app.whenReady().then(() => {
   protocol.handle('shortfab-media', (request) => {
     const url = new URL(request.url);
-    if (url.hostname !== 'asset' || url.pathname !== '/current' || !activeSource) {
+    const active = projects.activeSource;
+    if (url.hostname !== 'asset' || url.pathname !== '/current' || !active) {
       return new Response('Media not selected', { status: 404 });
     }
-    // The renderer never supplies a filesystem path. Only a user-selected file can be served.
-    return net.fetch(pathToFileURL(activeSource.path).toString());
+    // Filesystem paths only exist inside the main process and the project store.
+    return net.fetch(pathToFileURL(active.path).toString());
   });
 
-  ipcMain.handle('media:pick', async (): Promise<MediaInfo | null> => {
-    if (renderBusy) throw new Error('렌더가 끝나면 원본을 교체할 수 있습니다.');
+  ipcMain.handle('project:list', () => projects.list());
+  ipcMain.handle('project:create', () => { requireIdle(); return projects.create(); });
+  ipcMain.handle('project:open', (_event, id: string) => {
+    requireIdle(); return projects.open(id);
+  });
+  ipcMain.handle('project:save', (_event, edits: unknown) => {
+    requireIdle(); return projects.save(edits);
+  });
+
+  async function pickFile(): Promise<string | null> {
     const options: OpenDialogOptions = {
       properties: ['openFile'],
       filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'm4v'] }],
@@ -58,26 +65,33 @@ app.whenReady().then(() => {
     const selected = mainWindow
       ? await dialog.showOpenDialog(mainWindow, options)
       : await dialog.showOpenDialog(options);
-    if (selected.canceled || !selected.filePaths[0]) return null;
-    const path = selected.filePaths[0];
-    const probed = await probeMedia(path);
-    const info: MediaInfo = {
-      id: randomUUID(),
-      ...probed,
-      previewUrl: 'shortfab-media://asset/current',
-    };
-    activeSource = { id: info.id, path, info };
-    return info;
+    return selected.canceled ? null : selected.filePaths[0] ?? null;
+  }
+
+  ipcMain.handle('project:pickMedia', async () => {
+    requireIdle();
+    const file = await pickFile();
+    if (!file) return null;
+    requireIdle();
+    return projects.attachMedia(file, false);
+  });
+  ipcMain.handle('project:reconnectMedia', async () => {
+    requireIdle();
+    const file = await pickFile();
+    if (!file) return null;
+    requireIdle();
+    return projects.attachMedia(file, true);
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
     if (renderBusy) throw new Error('이미 렌더링 중입니다.');
-    if (!activeSource) throw new Error('로컬 원본 영상을 먼저 선택하세요.');
-    const request = validateRenderRequest(input, activeSource.info.duration);
-    if (request.sourceId !== activeSource.id) throw new Error('원본이 변경되었습니다. 다시 선택하세요.');
+    const source = projects.activeSource;
+    if (!source) throw new Error('로컬 원본 영상을 먼저 연결하거나 재연결하세요.');
+    const request = validateRenderRequest(input, source.info.duration);
+    if (request.sourceId !== source.id) throw new Error('원본이 변경되었습니다. 다시 선택하세요.');
     renderBusy = true;
     try {
-      const base = parse(activeSource.info.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
+      const base = parse(source.info.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
       const options: SaveDialogOptions = {
         title: 'MP4 내보내기',
         defaultPath: `${base || 'shortfab'}-${Math.floor(request.start)}-${Math.floor(request.end)}.mp4`,
@@ -90,7 +104,7 @@ app.whenReady().then(() => {
       if (chosen.canceled || !chosen.filePath) return { status: 'cancelled' };
       currentTask = new RenderTask();
       const path = chosen.filePath.toLowerCase().endsWith('.mp4') ? chosen.filePath : `${chosen.filePath}.mp4`;
-      await currentTask.run(activeSource.path, path, request, (progress) => {
+      await currentTask.run(source.path, path, request, (progress) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('render:progress', progress);
         }
@@ -102,9 +116,7 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('render:cancel', () => {
-    currentTask?.cancel();
-  });
+  ipcMain.handle('render:cancel', () => { currentTask?.cancel(); });
 
   openWindow();
   app.on('activate', () => {

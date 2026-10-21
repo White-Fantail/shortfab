@@ -1,6 +1,6 @@
 # 아키텍처 · 도메인 모델 (초기 설계)
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 실험 구현 중**. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 핵심 동작 사용자 확인, Phase 1 로컬 프로젝트 저장 1차 구현 중**. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
 
 ## 시스템 경계
 
@@ -81,7 +81,8 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 - `electron/preload.ts`: 허용된 최소 IPC만 노출, `electron/main.ts`에서 사용자 파일 선택·식별자 검증·저장 경로 확인.
 - `electron/media.ts`: 로컬 ffprobe; `electron/render.ts`: 로컬 ffmpeg 하위 프로세스, 출력 크롭/진행도/취소·임시 파일 검증.
 - `shortfab-media://asset/current`: 사용자가 선택한 **현재 파일 하나만** 로컬 미리보기로 노출하는 내부 URL. 렌더 엔진이 URL을 다운로드하지 않음.
-- 별도 FFmpeg 프로세스를 사용하지만 렌더 큐·오래 지속되는 독립 워커·프로젝트 저장은 아직 없음. FFmpeg/FFprobe는 PATH에 설치된 바이너리를 사용.
+- 별도 FFmpeg 프로세스를 사용하지만 렌더 큐·오래 지속되는 독립 워커·Phase 1에서는 프로젝트 JSON 저장·재열기·여러 클립 후보를 별도 `electron/projects.ts`로 추가. FFmpeg/FFprobe는 PATH에 설치된 바이너리를 사용.
 - 렌더 요청은 `sourceId` 일치, 유한한 시간 범위, 720/1080 해상도만 수용. 파일 시스템 경로 선택은 메인 프로세스에서만 허용.
 
 해당 프로토타입은 제품 플랫폼 확정이나 AI/SNS/스타일 카탈로그 구현을 의미하지 않습니다. 검증 순서·개발환경은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+\n## Phase 1 저장/재열기 1차 구조 (2026-10-22)\n\n- `src/shared/projects.ts`에 Project/StoredAsset/ProjectClip/ProjectEdits/ProjectView 계약, 스키마 버전 1과 타입·구간·중복 ID 검증을 둡니다.\n- `electron/projects.ts`는 앱 사용자 데이터 폴더의 `projects/{uuid}.json` 읽기·임시 파일 원자 교체·리스트·현재 프로젝트 활성화·원본 연결/재연결을 담당합니다. 렌더러는 파일 경로 대신 편집 값만 전달합니다.\n- `project:list/create/open/save`와 `project:pickMedia/reconnectMedia`만 preload로 노출합니다. 기존 `render:start`의 sourceId와 로컬 경로 검증은 유지합니다.\n- 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.\n- Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.\n- **검증 상태:** 단위 테스트 코드 추가, 실제 앱 실행·CI·OS별 재연결/원자 저장 동작은 확인 대기.\n
