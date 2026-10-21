@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { RenderProgress, RenderRequest, RenderResult } from '../src/shared/contracts.js';
 import type { ProjectEdits, ProjectSummary, ProjectView } from '../src/shared/projects.js';
 import type { BindSourceRequest } from '../src/shared/sources.js';
+import type { ApprovedCloudSourceRequest } from '../src/shared/cloud.js';
 import type { PublishDraft, PublishJobView, PublishOverview, PublishProgress } from '../src/shared/publishing.js';
 
 contextBridge.exposeInMainWorld('shortfab', {
@@ -12,6 +13,7 @@ contextBridge.exposeInMainWorld('shortfab', {
   pickMedia: (): Promise<ProjectView | null> => ipcRenderer.invoke('project:pickMedia'),
   reconnectMedia: (): Promise<ProjectView | null> => ipcRenderer.invoke('project:reconnectMedia'),
   bindYouTubeMedia: (request: BindSourceRequest): Promise<ProjectView | null> => ipcRenderer.invoke('project:bindYouTube', request),
+  bindCloudSource: (request: ApprovedCloudSourceRequest): Promise<ProjectView> => ipcRenderer.invoke('project:bindCloud', request),
   startRender: (request: RenderRequest): Promise<RenderResult> => ipcRenderer.invoke('render:start', request),
   cancelRender: (): Promise<void> => ipcRenderer.invoke('render:cancel'),
   publishOverview: (): Promise<PublishOverview> => ipcRenderer.invoke('publish:overview'),
