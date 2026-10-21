@@ -97,3 +97,12 @@ YouTube URL에서 구간 후보를 만든 뒤 **권리자 이름·허가 증빙 
 
 이는 허가된 원본 파일 취득용 기초 어댑터입니다. 실제 파트너 권한·동영상 동일성 및 3개 MP4 실제 생성/OS 설치 테스트는 아직 수행하지 않았습니다. 상세 사용법과 검증 게이트는 [YF-1 원본 연결 문서](docs/YF1_AUTHORIZED_SOURCES.md)를 참조하세요.
 
+
+
+## YF-2 · YouTube 영상 ID에서 승인된 원본 자동 탐색
+
+승인 파트너가 구성된 ShortFab에서는 YouTube URL 입력/공식 플레이어 탐색 후 **“YouTube ID로 승인 원본 자동 찾기”** 버튼을 사용할 수 있습니다. 파트너의 영상 ID 카탈로그에서 **Ed25519 서명된 원본 정보(다운로드 위치·SHA-256·사용권 범위/만료)**를 조회하고, 서명·영상 ID·호스트/파일 검증을 거쳐 자동 연결합니다. 기존 로컬/직접 링크 연결도 유지됩니다.
+
+운영자는 `SHORTFAB_APPROVED_SOURCE_HOSTS`, `SHORTFAB_PARTNER_CATALOG_ENDPOINT`, `SHORTFAB_PARTNER_PUBLIC_KEY_B64`를 설정해야 합니다. 실제 파트너 API/계약/실영상 원본이 없는 기본 앱에서는 자동 검색 버튼이 비활성화됩니다. 카탈로그 서명은 파일 매핑에 대한 **권리자 주장 진위**를 확인할 뿐 YouTube 영상 프레임 일치나 실제 권리 관계를 독립적으로 증명하지 않습니다.
+
+[파트너 API·설정·검증 항목](docs/PARTNER_CATALOG.md) · [개발 로드맵](docs/ROADMAP.md). **파트너 실연동·OS 실기·실제 3개 영상 익스포트는 미검증**.
