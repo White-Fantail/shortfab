@@ -457,12 +457,47 @@ function App() {
                 onChange={(event) => setYoutubeUrl(event.target.value)}
                 placeholder="https://youtu.be/…" />
               <p className="hint">공식 플레이어에서 영상을 탐색하고 원하는 구간을 클립 후보로 저장하세요.</p>
-              {youtubeId && <div className="source-details" role="status">
-                <strong>PREVIEW ONLY · 미디어 미확보</strong>
-                <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft?.youtubeDuration ?? 0)}` : '영상 메타데이터 로딩 중'}</span>
-                <span>이 링크만으로 MP4를 만들 수 없습니다. 권한 있는 렌더 원본을 연결하는 기능은 YF-1에서 제공합니다.</span>
-                <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">원본 YouTube에서 열기 ↗</a>
-              </div>}
+              {youtubeId && <>
+                <div className="source-details" role="status">
+                  <strong>{linkedAsset ? 'READY TO RENDER · 원본 연결됨' : (linked?.state ?? 'preview_only').toUpperCase()}</strong>
+                  <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
+                  <span>{linkedAsset ? `원본: ${linkedAsset.fileName} · 오프셋 +${linkedAsset.startOffsetSeconds}초` :
+                    linked?.explanation ?? '원본 연결 전에는 탐색만 할 수 있습니다.'}</span>
+                  <span>SHA-256 및 길이 검증은 영상 내용 동일성이나 법적 사용 허가를 자동 증명하지 않습니다.</span>
+                  <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">YouTube에서 원본 보기 ↗</a>
+                </div>
+                <div className="source-binding">
+                  <strong>허가받은 인코딩 원본 연결</strong>
+                  <p className="hint">권리자가 제공한 영상 파일을 연결합니다. 파일은 로컬에 보관되며 같은 YouTube ID로 다시 찾을 수 있습니다.</p>
+                  <label htmlFor="rights-holder">권리자 / 계약 상대방</label>
+                  <input id="rights-holder" value={rightsForm.rightsHolder} disabled={busy || rendering}
+                    placeholder="이름 또는 조직" onChange={e => setRightsForm(v => ({ ...v, rightsHolder: e.target.value }))} />
+                  <label htmlFor="rights-evidence">이용 허가 증빙 참조</label>
+                  <input id="rights-evidence" value={rightsForm.evidenceRef} disabled={busy || rendering}
+                    placeholder="계약 번호, 승인 이메일 등" onChange={e => setRightsForm(v => ({ ...v, evidenceRef: e.target.value }))} />
+                  <label htmlFor="rights-offset">영상 시작 오프셋 (초)</label>
+                  <input id="rights-offset" type="number" min="0" max="86400" step="0.1"
+                    value={rightsForm.startOffsetSeconds} disabled={busy || rendering}
+                    onChange={e => setRightsForm(v => ({ ...v, startOffsetSeconds: Number(e.target.value) }))} />
+                  <label htmlFor="rights-hash">권리자 제공 SHA-256 (선택)</label>
+                  <input id="rights-hash" value={rightsForm.expectedSha256 ?? ''} disabled={busy || rendering}
+                    placeholder="64자 체크섬" onChange={e => setRightsForm(v => ({ ...v, expectedSha256: e.target.value || null }))} />
+                  <label htmlFor="rights-expiry">사용 허가 만료일 (선택)</label>
+                  <input id="rights-expiry" type="date" value={rightsForm.expiresAt ?? ''} disabled={busy || rendering}
+                    onChange={e => setRightsForm(v => ({ ...v, expiresAt: e.target.value || null }))} />
+                  <label className="rights-checkbox"><input type="checkbox" checked={rightsForm.allowClip}
+                    onChange={e => setRightsForm(v => ({ ...v, allowClip: e.target.checked }))} />클립 발췌 사용 허가를 받았습니다.</label>
+                  <label className="rights-checkbox"><input type="checkbox" checked={rightsForm.allowDerivativeEdit}
+                    onChange={e => setRightsForm(v => ({ ...v, allowDerivativeEdit: e.target.checked }))} />숏폼 변형·편집 허가를 받았습니다.</label>
+                  <label className="rights-checkbox"><input type="checkbox" checked={rightsForm.allowRepost}
+                    onChange={e => setRightsForm(v => ({ ...v, allowRepost: e.target.checked }))} />YouTube 재게시까지 허가를 받았습니다.</label>
+                  <button className="secondary full" disabled={!draft?.youtubeDuration || busy || rendering || publishingBusy ||
+                    !rightsForm.allowClip || !rightsForm.allowDerivativeEdit || !rightsForm.rightsHolder.trim() || !rightsForm.evidenceRef.trim()}
+                    onClick={() => void bindAuthorizedSource()}>
+                    {linkedAsset ? '연결된 원본 다시 선택' : '권리자 원본 파일 선택 및 연결'}
+                  </button>
+                </div>
+              </>}
               {draft?.youtubeUrl && !youtubeId && <p className="warning">올바른 YouTube 링크를 입력해 주세요.</p>}
             </section>
           )}
@@ -581,7 +616,9 @@ function App() {
           <div className="export-spec"><span>해상도</span><strong>{clip ? `${clip.width} × ${clip.width * 16 / 9}` : '—'}</strong></div>
           <div className="export-spec"><span>프레임</span><strong>30 FPS</strong></div>
           <div className="export-spec"><span>클립 길이</span><strong>{formatTime(clip ? clip.end - clip.start : 0)}</strong></div>
-          {sourceTab === 'youtube' && <p className="warning">PREVIEW ONLY · URL 마커는 저장됩니다. MP4 출력에는 재편집 권한과 연결된 실제 미디어가 필요합니다.</p>}
+          {sourceTab === 'youtube' && <p className={linkedAsset ? 'hint' : 'warning'}>{linkedAsset ?
+            'YouTube 마커를 연결된 허가 원본 시각으로 변환해 내보냅니다.' :
+            'PREVIEW ONLY · 권리자 원본을 연결하기 전에는 MP4로 출력할 수 없습니다.'}</p>}
           <button className="primary full export-button" disabled={!canRender} onClick={() => void renderClip()}>
             {rendering ? '렌더링 중…' : '선택 클립 MP4 익스포트'}
           </button>
@@ -596,6 +633,8 @@ function App() {
           <p className="eyebrow">05 — PUBLISH · YOUTUBE</p>
           <h2>YouTube 업로드</h2>
           <p className="hint">MP4 익스포트와 YouTube 게시 승인은 별개입니다. 연결된 Google 계정으로 공식 API를 이용해 업로드합니다.</p>
+          {clip?.source === 'youtube' && !linked?.canPublishYouTube &&
+            <p className="warning">YouTube 재게시 권한 선언이 없거나 원본 검증에 실패하여 업로드할 수 없습니다.</p>}
           <div className="publish-account">
             <span>{publishing?.connected ? '● YouTube 연결됨' :
               publishing?.configured ? '○ 계정 연결 필요' : '○ Google OAuth 설정 필요'}</span>
