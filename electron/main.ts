@@ -120,7 +120,7 @@ app.whenReady().then(() => {
       buttons: ['취소', '업로드 승인'], defaultId: 0, cancelId: 0, noLink: true,
     });
     if (choice.response !== 1) return null;
-    return publisher.start(metadata, projectId);
+    return publisher.start(metadata, projectId, projects.activeClip);
   });
   ipcMain.handle('publish:retry', async (_event, id: string) => {
     requireIdle();
@@ -173,7 +173,7 @@ app.whenReady().then(() => {
           mainWindow.webContents.send('render:progress', progress);
         }
       });
-      await publisher.recordRender(path, projectId, activeClip.id);
+      await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end, activeClip.width);
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
