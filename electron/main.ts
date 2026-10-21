@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron';
 import { join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,7 +33,16 @@ function openWindow(): void {
       nodeIntegration: false, webSecurity: true,
     },
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'https:' && target.hostname === 'www.youtube.com' &&
+        target.pathname === '/watch' && /^[\w-]{11}$/.test(target.searchParams.get('v') ?? '')) {
+        void shell.openExternal(target.origin + target.pathname + '?v=' + target.searchParams.get('v'));
+      }
+    } catch { /* Invalid or unexpected URL is blocked. */ }
+    return { action: 'deny' };
+  });
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
   const developmentUrl = process.env.VITE_DEV_SERVER_URL;
   if (developmentUrl) void mainWindow.loadURL(developmentUrl);
@@ -133,7 +142,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy) throw new Error('이미 렌더링 중입니다.');
+    if (renderBusy || publisher.isBusy) throw new Error('이미 렌더링 또는 게시 작업 중입니다.');
     const source = projects.activeSource;
     if (!source) throw new Error('로컬 원본 영상을 먼저 연결하거나 재연결하세요.');
     const request = validateRenderRequest(input, source.info.duration);
