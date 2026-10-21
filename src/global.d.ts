@@ -15,6 +15,8 @@ declare global {
       reconnectMedia(): Promise<ProjectView | null>;
       bindYouTubeMedia(request: BindSourceRequest): Promise<ProjectView | null>;
       bindCloudSource(request: ApprovedCloudSourceRequest): Promise<ProjectView>;
+      partnerCatalogStatus(): Promise<{ configured: boolean }>;
+      bindPartnerSource(): Promise<ProjectView>;
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
       onProgress(callback: (progress: RenderProgress) => void): () => void;
