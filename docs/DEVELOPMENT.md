@@ -90,3 +90,12 @@ YouTube URL로 실제 클립 3개를 먼저 저장합니다. 권리자 제공 �
 같은 videoId를 다른 프로젝트에 넣으면 `userData/sources/approved/{videoId}.json`에 보관된 연결을 자동 재검증합니다. 소스를 변경/삭제하거나 권리를 만료시키면 렌더/업로드를 차단해야 합니다. 오프셋은 `sourceTime = youtubeTime + offsetSeconds`입니다. 3개 MP4의 실제 FFprobe 길이/화면·프레임/오디오 및 YouTube 원본 콘텐츠 일치 여부는 별도 수동 검증이 필요합니다.
 
 로컬 파일 검증 결과는 권리자와 실제 라이선스 및 YouTube 영상과의 내용 동일성을 *자동 보증하지 않습니다*. 사용자 선언을 기술적 권리 증명으로 취급하지 마세요. 승인 클라우드 스토리지 자동 취득은 다음 작업입니다. [상세 체크리스트](YF1_AUTHORIZED_SOURCES.md).
+
+
+## YF-1 클라우드 연결 개발/테스트
+
+환경변수 `SHORTFAB_APPROVED_SOURCE_HOSTS`에 실제 허가된 원본 배포 호스트를 쉼표로 등록한 후 Electron을 실행합니다. 예: `SHORTFAB_APPROVED_SOURCE_HOSTS=media.partner.example npm run dev`. HTTPS 직접 미디어 URL과 **권리자 SHA-256 64자리** 및 기존 권리자 허가 입력을 제공하고 클라우드 연결 버튼을 누릅니다. 앱은 원본을 개인 데이터 폴더에 저장하고 다음 프로젝트에서도 등록된 videoId로 자동 매핑하도록 구현했습니다.
+
+보안 검사: HTTPS만, 호스트 exact allowlist, IPv4 공인 DNS 접속 주소 고정, 리다이렉트 차단, TLS 인증서 검증, 응답 크기 최대 2 GiB, 120초 제한, checksum 필수·전체 비교, FFprobe/시간 범위 검증. 미디어 URL(서명 토큰 포함)을 프로젝트에 보존하지 않습니다. `src/shared/cloud.test.ts`에는 부적절한 URL/호스트/사설 주소/해시 누락의 단위 테스트를 추가했습니다.
+
+미검증: 실제 CDN/파트너 URL E2E, 파트너 인증 갱신, 파일 동일성·AV 싱크·3개 MP4 결과, OS별 패키징. 원본 직접 파일 URL이 아닌 공유 페이지 링크(Drive의 브라우저 페이지 등)는 지원하지 않습니다.
