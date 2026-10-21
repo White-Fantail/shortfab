@@ -1,5 +1,6 @@
 import type { RenderProgress, RenderRequest, RenderResult } from './shared/contracts';
 import type { ProjectEdits, ProjectSummary, ProjectView } from './shared/projects';
+import type { BindSourceRequest } from './shared/sources';
 import type { PublishDraft, PublishJobView, PublishOverview, PublishProgress } from './shared/publishing';
 
 declare global {
@@ -11,6 +12,7 @@ declare global {
       saveProject(edits: ProjectEdits): Promise<ProjectView>;
       pickMedia(): Promise<ProjectView | null>;
       reconnectMedia(): Promise<ProjectView | null>;
+      bindYouTubeMedia(request: BindSourceRequest): Promise<ProjectView | null>;
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
       onProgress(callback: (progress: RenderProgress) => void): () => void;
