@@ -94,6 +94,8 @@ function App() {
     editVersion.current += 1;
     setProject(view);
     setDraft(edits);
+    setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
+    setCloudError('');
     const linkedRights = view.youtubeSource.binding;
     setRightsForm(linkedRights ? {
       rightsHolder: linkedRights.rights.rightsHolder,
