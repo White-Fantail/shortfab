@@ -75,7 +75,8 @@ function App() {
     publishing?.artifact?.clipId === clip?.id &&
     publishing?.artifact?.start === clip?.start &&
     publishing?.artifact?.end === clip?.end &&
-    publishing?.artifact?.width === clip?.width;
+    publishing?.artifact?.width === clip?.width &&
+    publishing?.artifact?.sourceBindingId === (clip?.source === 'youtube' ? linkedAsset?.sourceAssetId ?? null : null);
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
   const canPublish = publishReady &&
     (clip?.source !== 'youtube' || (linked?.canPublishYouTube && linkedAsset !== null)) &&
