@@ -59,6 +59,14 @@ npm run build
 
 `npm run package:mac`, `npm run package:win` 스크립트와 수동 `Desktop packaging smoke test` Action이 준비됐지만 **실제 설치, 코드서명, FFmpeg 번들, GPU 성능 검증은 아직 없습니다.** 런타임 바이너리 번들/라이선스와 설치 테스트를 통과하기 전에는 배포용으로 표시하지 않습니다.
 
+## Phase 2 YouTube 게시 개발
+
+- Google Cloud YouTube Data API v3 활성화, Desktop OAuth 클라이언트 설정과 `SHORTFAB_GOOGLE_CLIENT_ID` 환경변수 설정이 필요합니다.
+- Chromium 창이 아닌 시스템 브라우저에서 동의를 완료하고, Electron `safeStorage`에 암호화된 갱신용 토큰/게시 기록을 보관합니다. 보안 저장소가 지원되지 않는 경우 계정 연결은 실패해야 합니다.
+- 성공적으로 익스포트한 **현재 프로젝트의 선택 클립**에서만 게시가 가능하며, OS 승인 창에서 별도 업로드 승인이 필요합니다. 기본 공개 범위는 비공개이고 아동용 여부를 명시적으로 선택합니다.
+- YouTube 게시 작업은 최대 8 MiB씩 순차 전송, 중단 시 기존 세션 확인, 수동 재개, 영상 ID 후속 상태 확인으로 설계했습니다. 실계정 업로드 및 OS별 검증은 아직 필요합니다.
+- [Phase 2 설정 및 수용 검사](PHASE2_YOUTUBE.md)
+
 ## 다음 구현
 
-Phase 1 저장/재열기 앱 통합 검증 및 FFmpeg 통합 테스트, YouTube IFrame API 기반 타임코드 탐색, FFmpeg 배포 전략과 Electron/Tauri 검증. 이후 Composition에 스타일·자막·오디오·CTA·버전 스냅샷을 단계적으로 연결합니다.
+Phase 2 Google 인증/실제 비공개 업로드/상태·재개 통합 테스트와 Phase 1 저장/재열기 앱 통합 검증, YouTube IFrame API 타임코드 탐색, FFmpeg 배포 검증. 이후 Composition 스타일·자막·오디오·CTA·버전 스냅샷을 개발합니다.
