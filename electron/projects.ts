@@ -36,6 +36,7 @@ function assertRecord(input: unknown, id: string): ProjectRecord {
 export class ProjectStore {
   private active: ProjectRecord | null = null;
   private connectedPath: string | null = null;
+  private mediaGeneration = 0;
 
   get activeSource(): { id: string; path: string; info: MediaInfo } | null {
     const asset = this.active?.asset;
@@ -54,7 +55,7 @@ export class ProjectStore {
       width: asset.width,
       height: asset.height,
       hasAudio: asset.hasAudio,
-      previewUrl: `shortfab-media://asset/current?v=${this.active?.revision ?? 0}`,
+      previewUrl: `shortfab-media://asset/current?v=${this.mediaGeneration}`,
     };
   }
 
@@ -144,6 +145,7 @@ export class ProjectStore {
     }
     this.active = record;
     this.connectedPath = connectedPath;
+    this.mediaGeneration += 1;
     return this.view();
   }
 
@@ -191,6 +193,7 @@ export class ProjectStore {
     await this.write(updated);
     this.active = updated;
     this.connectedPath = filePath;
+    this.mediaGeneration += 1;
     return this.view();
   }
 }
