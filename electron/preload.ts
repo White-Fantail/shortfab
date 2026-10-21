@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('shortfab', {
   reconnectMedia: (): Promise<ProjectView | null> => ipcRenderer.invoke('project:reconnectMedia'),
   bindYouTubeMedia: (request: BindSourceRequest): Promise<ProjectView | null> => ipcRenderer.invoke('project:bindYouTube', request),
   bindCloudSource: (request: ApprovedCloudSourceRequest): Promise<ProjectView> => ipcRenderer.invoke('project:bindCloud', request),
+  partnerCatalogStatus: (): Promise<{ configured: boolean }> => ipcRenderer.invoke('partner:status'),
+  bindPartnerSource: (): Promise<ProjectView> => ipcRenderer.invoke('project:bindPartner'),
   startRender: (request: RenderRequest): Promise<RenderResult> => ipcRenderer.invoke('render:start', request),
   cancelRender: (): Promise<void> => ipcRenderer.invoke('render:cancel'),
   publishOverview: (): Promise<PublishOverview> => ipcRenderer.invoke('publish:overview'),
