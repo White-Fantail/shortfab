@@ -115,3 +115,9 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 - 서버가 업로드를 받은 뒤 응답이 끊길 수 있으므로 세션 URI를 `safeStorage`로 암호화해 기록합니다. 중단/복구 시 YouTube `308 Range`를 먼저 확인하고 새 `videos.insert` 요청은 자동 생성하지 않습니다. 세션 만료나 완료 ID 불명은 사용자에게 YouTube Studio 점검을 요청합니다.
 - 상태는 `uploading → processing → published | action_required` 또는 `failed`이며 `published`는 원격 처리 성공을 뜻하고 **전체 공개나 Shorts 분류를 의미하지 않습니다**. UI에는 게시 이력과 재확인/이어올리기 버튼을 제공합니다.
 - 구체적인 설정과 출시 게이트는 [PHASE2_YOUTUBE.md](PHASE2_YOUTUBE.md). **Google 실계정 연동/CI/OS별 앱 실행 검증 이전이므로 Phase 2 완료 상태는 아닙니다.**
+
+## YF-1 권리자 파일 매핑 (2026-10-22 개발 코드)
+
+`YouTubeReference`는 정규화된 videoId·URL·IFrame 메타데이터(길이)를 나타냅니다. `RightsGrant`는 권리자 이름, 사용 허가 증빙 참조, 발췌/변형/재게시 허용 범위와 만료를 **사용자가 선언한 데이터**로 보존합니다. `MediaBinding`은 videoId→원본 assetId·파일 SHA-256·길이·시간 오프셋을 고정하며, 실제 로컬 경로를 포함하는 `StoredMediaBinding`은 Electron 메인 프로세스 전용 프로젝트 JSON 및 `userData/sources/approved/`에만 보관합니다.
+
+`SourceResolver`는 미확보/허가 검토/파일 손실/렌더 가능 상태를 분리하고, 같은 videoId의 등록 자산을 앱 내에서 자동 매칭합니다. YouTube 클립 렌더는 `sourceTime = youtubeTime + startOffsetSeconds`로 변환하고 FFmpeg 직전에 파일·허가·해시를 재확인합니다. YouTube **게시**는 별도의 재게시 권한과 사용자 승인을 요구합니다. SHA-256·길이 검증은 YouTube 콘텐츠와의 실제 동일성/법적 권리 진위까지 증명하지 않으므로 해당 검증 및 승인 원격 스토리지 어댑터는 후속 단계입니다. [검증 가이드](YF1_AUTHORIZED_SOURCES.md).
