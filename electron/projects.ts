@@ -218,7 +218,12 @@ export class ProjectStore {
     const sameVideo = before !== null && before === after;
     const binding = sameVideo ? this.active.youtubeBinding :
       after ? await this.sources.lookup(after) : null;
-    this.youtubeVerified = binding ? await this.sources.isVerified(binding, edits.youtubeDuration) : false;
+    // Hashing a large original on every marker autosave is prohibitively expensive.
+    // Reverify on open/reconnect/render, and whenever the video/duration changes.
+    const unchanged = sameVideo && binding === this.active.youtubeBinding &&
+      edits.youtubeDuration === this.active.youtubeDuration;
+    this.youtubeVerified = unchanged ? this.youtubeVerified :
+      binding ? await this.sources.isVerified(binding, edits.youtubeDuration) : false;
     const updated: ProjectRecord = {
       ...this.active, ...edits, youtubeBinding: binding, revision: this.active.revision + 1,
       updatedAt: new Date().toISOString(),
@@ -236,10 +241,12 @@ export class ProjectStore {
     const binding = await this.sources.createBinding(videoId, filePath, input, this.active.youtubeDuration);
     const updated: ProjectRecord = { ...this.active, youtubeBinding: binding,
       revision: this.active.revision + 1, updatedAt: new Date().toISOString() };
+    // Register before mutating the project: a failed catalog write must not
+    // silently claim reusable automatic mapping.
+    await this.sources.register(binding);
     await this.write(updated);
     this.active = updated;
     this.youtubeVerified = true;
-    await this.sources.register(binding); // Registry enables subsequent URL-based automatic matching.
     return this.view();
   }
 
