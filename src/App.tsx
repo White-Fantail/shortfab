@@ -54,9 +54,12 @@ function App() {
     clip.start >= 0 && clip.end > clip.start + 0.199 && clip.end <= media.duration + 0.02);
   const canRender = validClip && sourceConnected && sourceTab === 'local' && !rendering && !busy && !publishingBusy;
   const publishReady = publishing?.artifact?.projectId === project?.id &&
-    publishing?.artifact?.clipId === clip?.id;
+    publishing?.artifact?.clipId === clip?.id &&
+    publishing?.artifact?.start === clip?.start &&
+    publishing?.artifact?.end === clip?.end &&
+    publishing?.artifact?.width === clip?.width;
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
-  const canPublish = publishReady && publishing?.connected && !rendering && !busy &&
+  const canPublish = publishReady && publishing?.connected && !dirty && !rendering && !busy &&
     !publishingBusy && publishForm.madeForKids !== null && Boolean(publishForm.title.trim());
 
   function applyView(view: ProjectView) {
