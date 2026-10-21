@@ -38,6 +38,12 @@ export class ProjectStore {
   private connectedPath: string | null = null;
   private mediaGeneration = 0;
 
+  get activeProjectId(): string | null { return this.active?.id ?? null; }
+
+  get activeClip(): ProjectClip | null {
+    return this.active?.clips.find((clip) => clip.id === this.active?.selectedClipId) ?? null;
+  }
+
   get activeSource(): { id: string; path: string; info: MediaInfo } | null {
     const asset = this.active?.asset;
     if (!asset || !this.connectedPath) return null;
