@@ -48,3 +48,10 @@
 메인 프로세스 `electron/cloud.ts`는 HTTPS TLS 검증, DNS 공개 IPv4 검사 및 접속 IP 고정, 30x 리다이렉트 거부, 120초 타임아웃, 2 GiB 크기 상한, content-type, Content-Length, 완료 SHA-256 검사를 수행합니다. 다운로드 성공 후 `electron/sources.ts`의 FFprobe/영상 범위 검사를 다시 수행하고 `provider: partner_file`로 등록합니다. 다운로드·검증 실패 시 작업 중 남은 임시 파일을 정리하고, 원본 누락 상태에서는 MP4를 출력하지 않습니다.
 
 현재 제공되는 것은 **사전 승인 호스트의 직접 파일 URL 경로**로, Google Drive/OAuth/파트너 카탈로그 API, 자동 서명 URL 갱신, 인증 토큰 갱신, 콘텐츠 fingerprint 검증, 실제 파트너 연동 E2E는 아직 없습니다. 테스트에서는 서명 URL의 query를 로깅하지 않는지, 리다이렉트 및 private IP가 차단되는지, 체크섬이 틀릴 때 캐시가 만들어지지 않는지 확인해야 합니다.
+
+
+## 합성 영상 3개 MP4 CI 통합 시험
+
+`electron/render.test.ts`는 FFmpeg의 합성 색상/오디오 영상을 테스트 픽스처로 만들고, YouTube 시간을 오프셋이 있는 실제 파일 구간으로 변환해 9:16 MP4 3개를 인코딩합니다. 각 파일의 화면 크기·길이·오디오 포함 여부를 FFprobe로 확인합니다. GitHub Actions의 `Code Quality` 워크플로에 FFmpeg 설치 단계가 포함됩니다.
+
+**합성 픽스처의 통과는 YF-1 Exit가 아닙니다.** 실제로 타인이 촬영한 YouTube 영상의 승인된 원본과 사용권이 준비되어야 videoId↔내용 동일성, 실제 권한, 네트워크 공급자, 앱 재열기 및 3개 MP4 실영상 시험을 수행할 수 있습니다.
