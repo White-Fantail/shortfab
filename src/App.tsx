@@ -144,7 +144,7 @@ function App() {
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
     const old = draftRef.current;
-    if (!old) return;
+    if (!old || publishingBusy) return;
     const next = update(old);
     draftRef.current = next;
     dirtyRef.current = true;
@@ -176,7 +176,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!dirty || !draft || busy || rendering) return;
+    if (!dirty || !draft || busy || rendering || publishingBusy) return;
     const timer = setTimeout(() => {
       void queueSave(draft, editVersion.current).catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -194,7 +194,7 @@ function App() {
   }
 
   async function openProject(id: string) {
-    if (!window.shortfab || busy || rendering || projectRef.current?.id === id) return;
+    if (!window.shortfab || busy || rendering || publishingBusy || projectRef.current?.id === id) return;
     setBusy(true);
     try {
       await flushEdits();
@@ -211,7 +211,7 @@ function App() {
   }
 
   async function newProject() {
-    if (!window.shortfab || busy || rendering) return;
+    if (!window.shortfab || busy || rendering || publishingBusy) return;
     setBusy(true);
     try {
       await flushEdits();
@@ -227,7 +227,7 @@ function App() {
   }
 
   async function chooseMedia(reconnect: boolean) {
-    if (!window.shortfab || busy || rendering) return;
+    if (!window.shortfab || busy || rendering || publishingBusy) return;
     setBusy(true);
     setError('');
     try {
