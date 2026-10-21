@@ -99,3 +99,10 @@ YouTube URL로 실제 클립 3개를 먼저 저장합니다. 권리자 제공 �
 보안 검사: HTTPS만, 호스트 exact allowlist, IPv4 공인 DNS 접속 주소 고정, 리다이렉트 차단, TLS 인증서 검증, 응답 크기 최대 2 GiB, 120초 제한, checksum 필수·전체 비교, FFprobe/시간 범위 검증. 미디어 URL(서명 토큰 포함)을 프로젝트에 보존하지 않습니다. `src/shared/cloud.test.ts`에는 부적절한 URL/호스트/사설 주소/해시 누락의 단위 테스트를 추가했습니다.
 
 미검증: 실제 CDN/파트너 URL E2E, 파트너 인증 갱신, 파일 동일성·AV 싱크·3개 MP4 결과, OS별 패키징. 원본 직접 파일 URL이 아닌 공유 페이지 링크(Drive의 브라우저 페이지 등)는 지원하지 않습니다.
+
+
+## YF-2 파트너 카탈로그 연결 개발
+
+실제 이용허가를 받은 파트너가 준비되면 앱 실행 전 `SHORTFAB_APPROVED_SOURCE_HOSTS`에 HTTPS 카탈로그와 미디어 제공 호스트를 **모두** 등록하고 `SHORTFAB_PARTNER_CATALOG_ENDPOINT` 및 `SHORTFAB_PARTNER_PUBLIC_KEY_B64`(Ed25519 SPKI DER base64 공개키)를 설정합니다. YouTube URL을 입력해 IFrame 메타데이터가 확보되면 “YouTube ID로 승인 원본 자동 찾기”가 활성화됩니다. 404는 등록된 원본 없음으로 안내하고, 등록된 영상이면 signed payload가 현재 videoId 및 허가와 일치해야 합니다.
+
+서명 키의 비공개 부분은 **파트너 서버에만** 보유하며 앱/리포지토리에 절대 넣지 마세요. 단위 검증: `electron/partner-contract.test.ts`. YF-1의 `electron/render.test.ts`로 3개 합성 MP4 렌더를 자동 확인합니다. 파트너 계정/API/실영상 연결 시험과 macOS·Windows 패키징 검증은 별도로 수행해야 합니다. [파트너 카탈로그 계약](PARTNER_CATALOG.md).
