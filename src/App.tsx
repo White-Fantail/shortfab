@@ -78,7 +78,15 @@ function App() {
   }
 
   async function refreshPublishing() {
-    if (window.shortfab) setPublishing(await window.shortfab.publishOverview());
+    if (!window.shortfab) return;
+    try {
+      const overview = await window.shortfab.publishOverview();
+      setPublishing(overview);
+    } catch (cause) {
+      // Credential errors must never make local editing or MP4 export appear to fail.
+      setPublishing(null);
+      setPublishError(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
   useEffect(() => {
@@ -97,8 +105,7 @@ function App() {
     } catch (cause) {
       setPublishError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      try { await refreshPublishing(); }
-      catch (cause) { setPublishError(cause instanceof Error ? cause.message : String(cause)); }
+      await refreshPublishing();
       setPublishingBusy(false);
     }
   }
