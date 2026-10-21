@@ -12,7 +12,7 @@ import {
 
 const SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 const CHUNK_SIZE = 8 * 1024 * 1024; // 256 KiB-aligned resumable upload chunks
-const MAX_SIZE = 256 * 1024 ** 3;
+const MAX_SIZE = 256 * 1000 ** 3;
 
 interface SavedJob extends PublishJobView {
   filePath: string; // Main process only. Encrypted at rest; never returned through IPC.
@@ -342,7 +342,7 @@ export class YouTubePublisher {
     const token = await this.token();
     const response = await fetch(url, {
       ...init, headers: { ...init.headers, Authorization: 'Bearer ' + token },
-      redirect: 'error', signal: AbortSignal.timeout(60_000),
+      redirect: init.redirect ?? 'error', signal: AbortSignal.timeout(60_000),
     });
     if (response.status === 401) this.access = null;
     return response;
@@ -425,7 +425,7 @@ export class YouTubePublisher {
       if (!job.sessionUrl) throw new Error('YouTube 세션을 찾을 수 없습니다.');
       const session = safeSessionUrl(job.sessionUrl);
       const probe = await this.authenticated(session, {
-        method: 'PUT', headers: { 'Content-Range': 'bytes */' + job.fileSize, 'Content-Length': '0' },
+        method: 'PUT', redirect: 'manual', headers: { 'Content-Range': 'bytes */' + job.fileSize, 'Content-Length': '0' },
       });
       let offset = 0;
       if (probe.status === 200 || probe.status === 201) {
@@ -454,7 +454,8 @@ export class YouTubePublisher {
       throw new Error('업로드 완료 응답을 받지 못했습니다. 세션 확인 후 재시도하세요.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'YouTube 업로드에 실패했습니다.';
-      await this.changed(job, job.sessionUrl ? 'failed' : 'action_required', message);
+      const expiredSession = job.sessionUrl && message.includes('세션이 만료');
+      await this.changed(job, job.sessionUrl && !expiredSession ? 'failed' : 'action_required', message);
       throw new Error(message);
     }
   }
