@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { youtubeVideoId, type RenderProgress } from './shared/contracts';
 import type { ProjectClip, ProjectEdits, ProjectSummary, ProjectView } from './shared/projects';
+import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
 type SourceTab = 'local' | 'youtube';
 
@@ -26,6 +27,13 @@ function App() {
   const [playhead, setPlayhead] = useState(0);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
   const [rendering, setRendering] = useState(false);
+  const [publishing, setPublishing] = useState<PublishOverview | null>(null);
+  const [publishingBusy, setPublishingBusy] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [publishMessage, setPublishMessage] = useState('');
+  const [publishForm, setPublishForm] = useState<{
+    title: string; description: string; privacyStatus: YouTubePrivacy; madeForKids: boolean | null;
+  }>({ title: '', description: '', privacyStatus: 'private', madeForKids: null });
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState('프로젝트를 불러오는 중입니다.');
@@ -44,7 +52,12 @@ function App() {
   const validClip = Boolean(media && clip &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
     clip.start >= 0 && clip.end > clip.start + 0.199 && clip.end <= media.duration + 0.02);
-  const canRender = validClip && sourceConnected && sourceTab === 'local' && !rendering && !busy;
+  const canRender = validClip && sourceConnected && sourceTab === 'local' && !rendering && !busy && !publishingBusy;
+  const publishReady = publishing?.artifact?.projectId === project?.id &&
+    publishing?.artifact?.clipId === clip?.id;
+  const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
+  const canPublish = publishReady && publishing?.connected && !rendering && !busy &&
+    !publishingBusy && publishForm.madeForKids !== null && Boolean(publishForm.title.trim());
 
   function applyView(view: ProjectView) {
     const edits = editorData(view);
@@ -61,12 +74,47 @@ function App() {
     setError('');
   }
 
+  async function refreshPublishing() {
+    if (window.shortfab) setPublishing(await window.shortfab.publishOverview());
+  }
+
+  useEffect(() => {
+    setPublishForm((current) => ({
+      ...current, title: (clip?.title ?? project?.title ?? '').slice(0, 100),
+    }));
+  }, [clip?.id, project?.id]);
+
+  async function youtubeAction(action: () => Promise<unknown>, success: string) {
+    if (!window.shortfab || publishingBusy || rendering || busy) return;
+    setPublishingBusy(true);
+    setPublishError('');
+    try {
+      const result = await action();
+      setPublishMessage(result === null ? '작업이 취소되었습니다.' : success);
+    } catch (cause) {
+      setPublishError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      try { await refreshPublishing(); }
+      catch (cause) { setPublishError(cause instanceof Error ? cause.message : String(cause)); }
+      setPublishingBusy(false);
+    }
+  }
+
+  function onPublished(job: PublishJobView) {
+    setPublishing((previous) => previous ? {
+      ...previous, jobs: [job, ...previous.jobs.filter((entry) => entry.id !== job.id)].slice(0, 20),
+    } : previous);
+  }
+
   async function refreshProjects() {
     if (window.shortfab) setProjects(await window.shortfab.listProjects());
   }
 
   useEffect(() => {
     let live = true;
+    const unsubscribePublish = window.shortfab?.onPublishProgress((value) => {
+      if (live) onPublished(value.job);
+    });
     const unsubscribe = window.shortfab?.onProgress((value) => {
       if (live) setProgress(value);
     });
@@ -82,12 +130,13 @@ function App() {
           if (!live) return;
           applyView(view);
           await refreshProjects();
+          await refreshPublishing();
         } catch (cause) {
           if (live) setError(cause instanceof Error ? cause.message : String(cause));
         }
       })();
     }
-    return () => { live = false; unsubscribe?.(); };
+    return () => { live = false; unsubscribe?.(); unsubscribePublish?.(); };
   }, []);
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
@@ -150,6 +199,7 @@ function App() {
       applyView(opened);
       setSourceTab('local');
       await refreshProjects();
+      await refreshPublishing();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -254,6 +304,10 @@ function App() {
         sourceId: media.id, start: clip.start, end: clip.end, width: clip.width,
       });
       setStatus(result.status === 'completed' ? `완료: ${result.outputPath}` : '내보내기가 취소되었습니다.');
+      if (result.status === 'completed') {
+        await refreshPublishing();
+        setPublishMessage('MP4가 준비되었습니다. 아래 YouTube 게시 설정을 확인해 주세요.');
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       if (message.includes('취소')) setStatus('렌더가 취소되었습니다.');
@@ -266,8 +320,8 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">S/</span><div><strong>ShortFab</strong><small>숏컷공장 · Phase 1</small></div></div>
-        <span className="stage-label">LOCAL FIRST · PROJECT LIBRARY</span>
+        <div className="brand"><span className="brand-mark">S/</span><div><strong>ShortFab</strong><small>숏컷공장 · Phase 2</small></div></div>
+        <span className="stage-label">LOCAL FIRST · EXPORT + YOUTUBE</span>
       </header>
 
       <div className="project-bar">
@@ -417,8 +471,76 @@ function App() {
             <div className="progress-track"><div style={{ width: `${progress.percent}%` }} /></div></div>
           <p className="status" aria-live="polite">{status}</p>
           {error && <p role="alert" className="error">{error}</p>}
-          <div className="coming-next"><strong>Phase 1 계속 진행</strong>
-            <p>클립 후보와 프로젝트 저장/복원을 먼저 구현했습니다. 다음은 선언형 스타일, 자막 편집, 나레이션, CTA를 렌더 파이프라인에 연결합니다.</p></div>
+          <div className="section-rule" />
+          <p className="eyebrow">05 — PUBLISH · YOUTUBE</p>
+          <h2>YouTube 업로드</h2>
+          <p className="hint">MP4 익스포트와 YouTube 게시 승인은 별개입니다. 연결된 Google 계정으로 공식 API를 이용해 업로드합니다.</p>
+          <div className="publish-account">
+            <span>{publishing?.connected ? '● YouTube 연결됨' :
+              publishing?.configured ? '○ 계정 연결 필요' : '○ Google OAuth 설정 필요'}</span>
+            {publishing?.connected ?
+              <button disabled={publishingBusy || rendering || busy} onClick={() =>
+                void youtubeAction(() => window.shortfab!.disconnectYouTube(), '계정 연결이 해제되었습니다.')}>연결 해제</button> :
+              <button disabled={!publishing?.configured || publishingBusy || rendering || busy} onClick={() =>
+                void youtubeAction(() => window.shortfab!.connectYouTube(), 'YouTube 계정이 연결되었습니다.')}>Google로 연결</button>}
+          </div>
+          {!publishing?.configured && <p className="hint">개발 환경에 SHORTFAB_GOOGLE_CLIENT_ID를 설정해야 연결할 수 있습니다.</p>}
+          <p className="hint">{publishReady ? `게시 준비: ${publishing?.artifact?.filename}` :
+            '현재 선택한 클립을 먼저 MP4로 익스포트해야 게시할 수 있습니다.'}</p>
+          <label htmlFor="publish-title">YouTube 제목</label>
+          <input id="publish-title" maxLength={100} value={publishForm.title} disabled={publishingBusy || rendering}
+            onChange={(event) => setPublishForm((current) => ({ ...current, title: event.target.value }))} />
+          <label htmlFor="publish-description">설명</label>
+          <textarea id="publish-description" rows={3} maxLength={5000} value={publishForm.description}
+            disabled={publishingBusy || rendering}
+            onChange={(event) => setPublishForm((current) => ({ ...current, description: event.target.value }))} />
+          <label htmlFor="publish-privacy">공개 범위</label>
+          <select id="publish-privacy" value={publishForm.privacyStatus} disabled={publishingBusy || rendering}
+            onChange={(event) => setPublishForm((current) => ({ ...current, privacyStatus: event.target.value as YouTubePrivacy }))}>
+            <option value="private">비공개 (기본값)</option>
+            <option value="unlisted">일부 공개</option>
+            <option value="public">전체 공개</option>
+          </select>
+          <label htmlFor="publish-kids">아동용 콘텐츠 여부 (필수)</label>
+          <select id="publish-kids" value={publishForm.madeForKids === null ? '' : String(publishForm.madeForKids)}
+            disabled={publishingBusy || rendering}
+            onChange={(event) => setPublishForm((current) => ({
+              ...current, madeForKids: event.target.value === '' ? null : event.target.value === 'true',
+            }))}>
+            <option value="">선택해 주세요</option>
+            <option value="false">아동용 아님</option>
+            <option value="true">아동용</option>
+          </select>
+          <button className="primary full publish-button" disabled={!canPublish}
+            onClick={() => void youtubeAction(
+              () => window.shortfab!.startPublish(publishForm as PublishDraft),
+              '영상 파일이 전송되었습니다. YouTube 처리 상태를 확인해 주세요.')}>
+            {publishingBusy ? 'YouTube 작업 중…' : '별도 승인 후 YouTube 업로드'}
+          </button>
+          {publishMessage && <p className="status" aria-live="polite">{publishMessage}</p>}
+          {publishError && <p className="error" role="alert">{publishError}</p>}
+          {projectJobs.length > 0 && <div className="publish-history">
+            <strong>최근 게시 작업</strong>
+            {projectJobs.map((job) => <div className="publish-job" key={job.id}>
+              <span className="job-name">{job.metadata.title}</span>
+              <small>{job.state} · {job.progress}% · {job.metadata.privacyStatus}</small>
+              <p className="hint">{job.message}</p>
+              {job.remoteUrl && <a href={job.remoteUrl} target="_blank" rel="noreferrer">YouTube 영상 보기 ↗</a>}
+              <div className="publish-buttons">
+                {(job.state === 'processing' || job.state === 'published' || job.state === 'action_required') &&
+                  job.remoteUrl && <button disabled={publishingBusy || rendering}
+                    onClick={() => void youtubeAction(
+                      () => window.shortfab!.refreshPublish(job.id),
+                      'YouTube 처리 상태를 확인했습니다.')}>상태 새로고침</button>}
+                {job.state === 'failed' && <button disabled={publishingBusy || rendering}
+                  onClick={() => void youtubeAction(
+                    () => window.shortfab!.retryPublish(job.id),
+                    '기존 업로드 세션을 재개했습니다.')}>이어서 업로드</button>}
+              </div>
+            </div>)}
+          </div>}
+          <div className="coming-next"><strong>게시 제한 및 수동 업로드</strong>
+            <p>API 연결이 불가능하거나 상태 확인이 필요하면 출력한 MP4를 YouTube Studio에서 직접 업로드하세요. 처리 완료는 전체 공개를 보장하지 않습니다.</p></div>
         </aside>
       </div>
     </div>
