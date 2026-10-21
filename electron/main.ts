@@ -16,12 +16,13 @@ let mainWindow: BrowserWindow | null = null;
 const projects = new ProjectStore();
 let currentTask: RenderTask | null = null;
 let renderBusy = false;
+let sourceBusy = false;
 const publisher = new YouTubePublisher((job) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('publish:progress', { job });
 });
 
 function requireIdle(): void {
-  if (renderBusy || publisher.isBusy) throw new Error('진행 중인 렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
+  if (renderBusy || sourceBusy || publisher.isBusy) throw new Error('진행 중인 원본 연결·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -96,6 +97,13 @@ app.whenReady().then(() => {
     requireIdle();
     return projects.bindYouTubeMedia(file, grant);
   });
+  ipcMain.handle('project:bindCloud', async (_event, payload: unknown) => {
+    requireIdle();
+    sourceBusy = true;
+    try { return await projects.bindCloudSource(payload); }
+    finally { sourceBusy = false; }
+  });
+
   ipcMain.handle('project:reconnectMedia', async () => {
     requireIdle();
     const file = await pickFile();
@@ -162,7 +170,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy || publisher.isBusy) throw new Error('이미 렌더링 또는 게시 작업 중입니다.');
+    if (renderBusy || sourceBusy || publisher.isBusy) throw new Error('이미 원본 연결, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
     const activeClip = projects.activeClip;
