@@ -1,6 +1,6 @@
 # 소스 권한 · 미디어 입력 · 플랫폼 배포
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md) §4, §10. 상태: **기획/미구현**. 정책·API 조건은 실제 개발/출시 직전에 재확인해야 합니다.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md) §4, §10. 상태: **YouTube 공식 OAuth/업로드 구현 코드 추가, 실계정 검증 대기**. Instagram/TikTok은 설계·미구현입니다. 정책·API 조건은 출시 전 재확인해야 합니다.
 
 ## 입력 소스는 탐색 가능성과 렌더 가능성을 구분
 
@@ -23,7 +23,7 @@ YouTube URL 입력은 썸네일/제목/임베드/마커를 제공할 수 있지�
 
 ## 공식 API 연동 범위
 
-- **YouTube**: IFrame Player API 탐색; YouTube Data API `videos.insert`를 통한 업로드; Google OAuth 동의·쿼터·프로젝트 인증 필요. Shorts 분류는 플랫폼 기준에 따라 달라짐.
+- **YouTube**: IFrame 프리뷰 탐색과 YouTube Data API `videos.insert` 업로드/세션 재개·`videos.list` 처리 확인 코드를 추가했습니다. Google Desktop OAuth PKCE/최소 `youtube.upload` 및 별도 승인, 토큰 암호화를 사용합니다. 실제 Google 앱 등록·실업로드·API 정책/쿼터 검증은 [Phase 2 지침](PHASE2_YOUTUBE.md)에 따라 진행해야 합니다. Shorts 분류는 플랫폼 기준에 따라 달라집니다.
 - **Instagram**: Meta Content Publishing API, Professional 계정·권한/제약 확인, 미디어 컨테이너 및 게시 상태 추적.
 - **TikTok**: Content Posting API 권한 승인과 앱 감사, 공개 범위 정책, 임시 제한 준수. 불가 시 사용자 수동 게시 또는 허용된 초안 워크플로.
 - **음원·효과음·폰트·나레이션**: 소스별 라이선스를 확인하고 타 플랫폼으로 재배포할 수 없는 자산은 사용을 제한.
