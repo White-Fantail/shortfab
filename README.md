@@ -2,16 +2,18 @@
 
 **Find the moment. Pick the style. Publish the short.**
 
-ShortFab은 긴 영상에서 좋은 구간을 찾고, 숏폼 비율·자막·나레이션·CTA 스타일을 선택해 MP4로 내보내고 지원 플랫폼에 게시하는 **선택 중심(short-form-first) 영상 제작 도구**입니다.
+ShortFab은 **이미 YouTube에 올라온 긴 영상의 URL을 붙여넣고**, 의미 있는 구간을 찾아 자막·나레이션·CTA로 새로운 숏폼을 구성하는 **YouTube-first 클리핑 제작 도구**입니다. 핵심 사용자는 **직접 영상을 촬영하거나 원본 MP4를 보유하지 않습니다**. 적법한 렌더 소스 확보가 가장 중요한 기술 과제입니다.
 
 > **현재 단계 (2026-10-22):** Phase 0 핵심 경로와 Phase 1 첫 기능 묶음(프로젝트 저장·재열기/다중 후보/재연결)은 사용자 확인을 받아 완료했습니다. **Phase 2의 공식 YouTube OAuth/업로드/상태 추적 코드와 화면을 `dev`에 추가했습니다.** Google Cloud 자격증명, 실계정 업로드 검증, CI 결과 및 OS별 패키징은 별도 검증이 필요합니다. Phase 1 전체(자막/TTS/CTA/스타일)는 여전히 진행 과제입니다.
 
 ## 목표 사용자 흐름
 
-`소스 연결 → 구간 탐색·후보 선택 → 화면 비율·스마트 크롭 → 자막·나레이션·스타일 → CTA → 미리보기·익스포트 → 사용자 승인 후 게시`
+`YouTube URL 붙여넣기 → 공식 플레이어에서 탐색·구간 후보 저장 → 권한 있는 원본 자동 확보/연결 → 숏폼 구성·스타일 → MP4 익스포트 → 사용자 승인 후 게시`
+
+**핵심 미구현 사항:** 현재는 YouTube 임베드로 탐색만 가능하고 URL만으로 FFmpeg MP4 클립 생성은 불가능합니다. 로컬 파일 기반 렌더 완료와 YouTube 업로드 개발을 **YouTube 링크→클립 제품 목표 달성으로 간주하지 않습니다**.
 
 - **로컬 우선 데스크톱 + 선택적 클라우드**: 편집·렌더는 로컬 우선, AI·프리셋 카탈로그·SNS 연결은 필요할 때 클라우드 사용. Phase 0·1 프로토타입은 Electron/React/TypeScript로 구축하며 최종 제품 스택 결정은 패키징·성능 검증 이후 확정합니다.
-- **YouTube URL 탐색**: 허용된 공식 임베드에서 구간/타임코드를 탐색할 수 있으나, 임의 YouTube 동영상을 링크만으로 다운로드하거나 변환해 주는 기능을 전제하지 않습니다. 렌더하려면 사용자가 제공한 원본 또는 권한 있는 미디어 소스가 필요합니다.
+- **YouTube URL이 1차 소스**: 링크로 구간을 찾고 후보를 저장하는 경험을 우선 개발합니다. 공식 YouTube API는 임의 영상 다운로드를 허용하지 않으므로, 실제 MP4는 **권리자 제공 파일·파트너/승인 저장소·기타 적법한 원본**과 영상 ID를 자동 연결하는 `SourceResolver` 경로를 우선합니다. 일반 공개 URL의 범용 MP4 변환을 지원한다고 오해시키지 않습니다.
 - **동적 스타일 라이브러리 (Trend Studio)**: 자막·모션·나레이션·음악/효과음·CTA를 조합하는 선언형 버전 프리셋을 원격 추가할 수 있게 설계합니다. 무단 미디어 수집이나 실행 코드 배포에 의존하지 않습니다.
 - **CTA Studio**: 영상 끝의 텍스트/애니메이션 오버레이, 엔드카드, 음성 CTA를 편집하며 플랫폼별 문구와 안전 영역을 다룹니다.
 - **명시적인 게시 승인**: MP4 생성과 YouTube 게시를 별도 작업으로 분리하고 OS 승인 대화상자를 표시합니다. Google API 연결 전에는 MP4 수동 업로드를 사용합니다.
@@ -25,10 +27,12 @@ ShortFab은 긴 영상에서 좋은 구간을 찾고, 숏폼 비율·자막·나
 | [아키텍처·데이터](docs/ARCHITECTURE.md) | 데스크톱/로컬 워커/클라우드 경계, 도메인 모델, 데이터 흐름 |
 | [Trend Studio](docs/TREND_STUDIO.md) | 트렌드 탐색, 스타일 생성·검증·원격 배포, 버전 고정 |
 | [CTA Studio](docs/CTA_STUDIO.md) | CTA 유형·설정·렌더링·플랫폼별 안전 영역 |
+| [YouTube-first 구현 조사](docs/YOUTUBE_FIRST_WORKFLOW.md) | **최우선 제품 흐름**, 공식/비공식 취득 방법, SourceResolver, 권리·출시 게이트 |
 | [입력·플랫폼 정책](docs/SOURCES_AND_PUBLISHING.md) | YouTube 링크 제한, 미디어 권리, SNS 게시 API 원칙 |
 | [Phase 2 YouTube 업로드](docs/PHASE2_YOUTUBE.md) | Google OAuth 연결, 보안 저장소, 공식 업로드/재시도, 운영·검증 |
 | [로드맵·완료 기준](docs/ROADMAP.md) | P0/P1/P2 범위, 작업 순서, 수용 테스트 |
 | [기술 의사결정](docs/adr/0001-local-first-hybrid.md) | 선택 사항과 기술 검증을 구분한 최초 ADR |
+| [YouTube 소스 전략 ADR](docs/adr/0002-youtube-first-source-acquisition.md) | YouTube URL 우선, 렌더 소스 취득 경계와 대안 |
 | [로컬 개발·검증](docs/DEVELOPMENT.md) | 실행, FFmpeg 설치, 현재 범위, 검증 방법 |
 | [개발 에이전트 규칙](AGENTS.md) | 브랜치, 구현 원칙, 변경 시 문서 관리 |
 
@@ -70,4 +74,6 @@ YouTube 업로드 개발 시 Desktop OAuth 클라이언트 ID를 `SHORTFAB_GOOGL
 
 ## 다음 구현·검증 목표
 
-Phase 2의 YouTube 게시 기초 코드를 작성했으며, **실제 게시 성공을 검증하거나 Phase 2를 완료 처리한 상태는 아닙니다.** Google 인증 및 비공개 시험 업로드, OS별 암호화 저장소, 세션 복구 검증이 우선입니다. Phase 1의 자동 자막·나레이션·CTA·스타일 카탈로그, YouTube 탐색 타임코드 마커는 여전히 미구현입니다.
+**최우선: YF-0 YouTube URL 기반 타임코드·클립 탐색 완성 → YF-1 권한 기반 SourceResolver/원본 자동 연결 → 해당 URL에서 새 MP4 생성 실증.** 이는 아직 미구현이며, 공식 Clips 공유 기능과 독립 MP4 생성은 서로 다릅니다.
+
+Phase 2의 YouTube **게시** 기초 코드는 있지만 Google 실계정/API 검증 전입니다. Phase 1의 자막·TTS·CTA·스타일 카탈로그도 아직 전체 완료가 아닙니다.
