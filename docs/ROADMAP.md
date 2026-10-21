@@ -6,14 +6,14 @@
 
 > **핵심 제품 목표:** 사용자는 원본 영상을 직접 촬영하거나 보유하지 않는다. YouTube URL로 기존 영상 구간을 고르고, 필요한 권리 및 인코딩 가능한 원본이 확보된 경우 숏폼 MP4를 제작해야 한다. 로컬 파일 기반 Phase 0/1 성공 및 YouTube **업로드** Phase 2 진행은 이 게이트의 완료를 의미하지 않는다.
 
-- [ ] **YF-0**: YouTube URL 기본 소스·IFrame Player API 실제 시각/seek/IN·OUT/루프/후보 마커 저장·재열기. 미디어 미확보 시 preview-only 명시
+- [ ] **YF-0**: YouTube URL 기본 소스·IFrame Player API 실제 시각/seek/IN·OUT/루프/후보 마커 저장·재열기. **코드 구현 (2026-10-22), CI 및 앱 실기 검증 대기**. 미디어 미확보 시 preview-only 명시
 - [ ] **YF-1**: YouTubeReference / RightsGrant / MediaBinding / SourceResolver 계약·상태 및 승인된 클라우드/권리자 파일 연결, 싱크 검증
 - [ ] **YF-1 Exit**: 사용자가 촬영하지 않은 YouTube 시험 영상의 URL로 시작해서, 재편집/게시 권한과 별도 제공된 적법한 원본을 자동 매핑하여 **클립 3개를 MP4로 익스포트**하고 재열기
 - [ ] **YF-2**: 사용자 수동 파일 선택을 줄일 파트너·권리자 제공 원본 자동 연동 및 권한 만료/삭제/동기화 실패 UX
 - [ ] **YF-3 (조건부)**: 공식 YouTube Clips/Remix 공유 UX. 비공식 추출기 경로는 별도 법률/YouTube 정책·서면 승인 평가 및 ADR 후 결정
 - [ ] **사업/출시 게이트**: "임의의 YouTube 공개 링크만으로 항상 MP4 변환" 불가 가능성을 사용자에게 명시하고, 적법한 소스 확보 성공률을 실제 시험 데이터로 측정
 
-**현재 상태: 미구현/미검증.** 정확한 구현·수용 기준은 [YouTube-first 설계](YOUTUBE_FIRST_WORKFLOW.md)와 [ADR-0002](adr/0002-youtube-first-source-acquisition.md)를 참조.
+**현재 상태: YF-0 코드 구현, CI/OS별 실기 미검증. YF-1 이후 미구현.** 정확한 구현·수용 기준은 [YouTube-first 설계](YOUTUBE_FIRST_WORKFLOW.md)와 [ADR-0002](adr/0002-youtube-first-source-acquisition.md)를 참조.
 
 ## Phase 0 — 기술 검증 및 개발 기반
 
@@ -55,6 +55,13 @@
 - [ ] MP4 익스포트 + 결과 확인
 
 **Exit:** 30분 원본에서 3개 클립을 만들고 저장·재열기·서로 다른 자막/CTA/나레이션 설정으로 MP4 익스포트.
+
+### YouTube-first YF-0 구현 기록 (2026-10-22)
+
+- YouTube 영상 URL을 기본 소스로 노출합니다. 공식 IFrame API로 영상 길이/현재 시각을 읽고 구간 seek/IN/OUT 마커, 재생/반복, 타임라인 탐색을 제공합니다.
+- YouTube 클립(`source: 'youtube'`)은 로컬 원본 없이 프로젝트 JSON에 YouTube 길이와 함께 저장·재열기 가능합니다. 기존 로컬 클립은 `source: 'local'`로 호환 마이그레이션합니다.
+- YouTube 마커와 로컬 클립을 분리하고 **preview-only** 상태 및 비활성화된 MP4 익스포트를 표시합니다. 렌더 메인 프로세스도 YouTube 클립을 직접 FFmpeg 입력으로 사용하지 못하게 검증합니다.
+- **수용 미완료:** 실제 Mac/Windows Electron 플레이어 재생, 임베딩 정책/지역/로그인 제한, 앱 재실행·구간 반복·URL 변경과 저장 경합 사례 확인이 필요합니다. YouTube 링크로 MP4까지 생성하는 YF-1 작업은 시작 전입니다.
 
 ### Phase 1 첫 구현 기록 (2026-10-22)
 

@@ -151,7 +151,7 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
   }, [videoId]);
 
   return <div className="youtube-preview">
-    <div className="youtube-frame" ref={host} />
+    <div className="youtube-frame"><div ref={host} /></div>
     {error && <p className="youtube-player-error" role="alert">{error}</p>}
   </div>;
 });

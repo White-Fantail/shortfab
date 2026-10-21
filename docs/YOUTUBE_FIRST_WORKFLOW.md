@@ -150,6 +150,14 @@ interface SourceResolver {
 
 \`videoId / preview availability / rights evidence / source provider / link-to-asset match / can-render / output hash / exact duration / failure reason\`을 기록한다. **최종 제품 성공 지표는 "링크를 붙여넣은 뒤 사용자가 원본을 직접 촬영·업로드하지 않고 적법한 MP4 클립을 만들 수 있는 비율"**이다.
 
+## YF-0 구현 노트 (2026-10-22)
+
+- `src/YouTubePreview.tsx`는 공식 YouTube IFrame Player API를 호출하여 `getDuration`, `getCurrentTime`, `seekTo`, `playVideo`, `pauseVideo`를 다룹니다. 권리 없는 원본을 다운로드하거나 HTML5 `<video>`의 src로 노출하지 않습니다.
+- 프로젝트 클립은 `source: 'local' | 'youtube'`로 명확하게 분리하며 기존 로컬 프로젝트의 source 필드 누락은 `local`로 간주합니다. YouTube 동영상 길이(`youtubeDuration`)는 클립의 상한 검증용 메타데이터이고 렌더 파일이 아닙니다.
+- YouTube URL이 다른 videoId로 바뀌면 기존 YouTube 후보를 제거하고 새 메타데이터를 요청합니다. 기존 로컬 클립은 보존합니다.
+- 공식 플레이어의 재생 제한(퍼가기 금지, 연령·지역·로그인, 오류 153 등)과 배포된 Electron의 origin/referrer 동작은 실기 테스트 대상입니다. 이 제한을 회피하여 오디오/비디오 데이터를 취득하지 않습니다.
+- 상태: **코드 구현/실기 검증 대기**. 미디어가 없는 상태는 `preview_only`, `SourceResolver`/`RightsGrant`/`MediaBinding`과 비디오 동일성 검증은 다음 YF-1에 해당합니다.
+
 ## 5. 우선순위가 바뀐 개발 로드맵
 
 | 단계 | 구현 | 수용 확인 |

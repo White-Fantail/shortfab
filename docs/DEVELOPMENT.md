@@ -32,7 +32,7 @@ npm run build
 3. 타임라인에서 30초 이하 구간 IN/OUT 지정 → 미리보기.
 4. 720p(720×1280) MP4 출력 → 재생/길이/영상·오디오/크롭 확인.
 5. 1080p 출력, 오디오 없는 원본, 짧은 원본, 잘못된 구간, 취소/재시도, 파일 덮어쓰기 확인.
-6. YouTube 임베드는 **탐색 전용**임을 확인. URL만으로 MP4 생성 버튼이 활성화되지 않아야 합니다.
+6. **YF-0 실기 체크:** 새 프로젝트에서 YouTube 소스가 기본 선택되는지 확인 → 공개 영상 URL을 입력해 IFrame API 로딩, 재생·seek, 영상 길이와 현재 시각 읽기, 타임라인 이동, IN/OUT, 구간 반복 테스트. YouTube 후보 3개 추가→저장·재열기 후 구간 동일성 테스트. URL 교체 시 이전 비디오 후보만 삭제되고 로컬 후보는 유지되는지 확인. 파일 연결 없이 MP4 출력이 비활성화된 preview-only 상태 확인. 퍼가기 금지/연령 제한/비공개 영상은 안내문과 원본 열기 대체 경로 확인.
 7. 명령 실패, 손상된 영상, 저장 경로 접근권한 문제 시 에러 메시지를 확인합니다.
 8. 프로젝트 이름을 변경하고 클립 후보를 3개 생성하여 각각 IN/OUT/720p·1080p 설정 후 앱 재시작 → 저장값 복원 확인.
 9. 원본 파일을 이동한 뒤 프로젝트를 다시 열면 `원본을 찾을 수 없음` 상태이고 렌더 불가인지 확인. `원본 파일 재연결`로 같은 파일을 선택하면 클립 설정 유지 여부 확인. 다른 파일을 선택하면 재연결이 거절되어야 합니다.
@@ -70,7 +70,7 @@ npm run build
 ## 최우선 신규 개발: YouTube URL → 실제 숏폼 (미구현)
 
 - 로컬 영상으로 성공한 Phase 0·1 테스트는 **기존 YouTube 영상을 직접 파일 보유 없이 클리핑**하려는 사용자 요구의 충분조건이 아닙니다.
-- **YF-0:** 기본 소스 탭을 YouTube로 변경, IFrame Player API \`getCurrentTime\`/\`seekTo\`·IN/OUT/루프·후보 마커 저장 및 재열기를 구현합니다. URL만 있으면 preview-only로 표시합니다.
+- **YF-0 (코드 구현, 실기 검증 대기):** 새 프로젝트 기본 소스는 YouTube입니다. 공식 IFrame Player API \`getCurrentTime\`/\`seekTo\`·IN/OUT·반복 재생·후보 마커를 프로젝트에 저장/복원하며 URL만 있으면 preview-only로 표시합니다. 앱의 파일 로드 origin 및 YouTube embed 정책에 따라 OS/배포 빌드에서 재생이 제한될 수 있으므로 실제 테스트가 필요합니다.
 - **YF-1:** \`YouTubeReference\`, \`RightsGrant\`, \`MediaBinding\`, \`SourceResolver\`를 도입해 권한 있는 권리자 제공 원본/스토리지 자산을 YouTube videoId에 연결합니다. 소스 fingerprint/타임 오프셋 검증 후 기존 FFmpeg 파이프라인을 사용합니다.
 - **YF-1 테스트:** 직접 촬영하지 않은 YouTube 테스트 영상의 URL + 별도로 승인된 해당 원본 자산 1개로 시작하여 3개 클립을 MP4로 내보냅니다. 원본 미확보/권한 만료/다른 영상 연결 시 작업이 차단되어야 합니다.
 - **YF-2:** 파일 수동 선택 없이 파트너 제공 파일을 URL에 자동 연결하는 흐름·권리 계약 증빙 저장. 3개 클립 후보/실패한 소스 연결 프로젝트를 재열어도 작업이 복원되어야 합니다.
@@ -78,5 +78,7 @@ npm run build
 - 상세 스펙과 정책 링크: [YOUTUBE_FIRST_WORKFLOW.md](YOUTUBE_FIRST_WORKFLOW.md) / [ADR-0002](adr/0002-youtube-first-source-acquisition.md).
 
 ## 다음 구현
+
+**YF-0 실기 수용 검증 및 YF-1 SourceResolver 구현**이 우선입니다. 검증 기록에는 videoId·재생 성공/실패·길이·클립 3개 저장 복원·YouTube URL 교체·MP4 차단 여부를 기록합니다. 개발 모드에서 정상 동작해도 패키징된 Electron의 `file://` origin/YouTube 임베드 제한을 반드시 따로 검증합니다.
 
 Phase 2 Google 인증/실제 비공개 업로드/상태·재개 통합 테스트와 Phase 1 저장/재열기 앱 통합 검증, YouTube IFrame API 타임코드 탐색, FFmpeg 배포 검증. 이후 Composition 스타일·자막·오디오·CTA·버전 스냅샷을 개발합니다.

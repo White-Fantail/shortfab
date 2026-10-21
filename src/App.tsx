@@ -78,7 +78,7 @@ function App() {
     setProject(view);
     setDraft(edits);
     setDirty(false);
-    setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.youtubeUrl ? 'youtube' : 'local'));
+    setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.media ? 'local' : 'youtube'));
     setLoopClip(false);
     setPlayhead(view.clips.find((c) => c.id === view.selectedClipId)?.start ?? 0);
     setProgress({ percent: 0, seconds: 0 });
@@ -427,7 +427,7 @@ function App() {
               <p className="hint">공식 플레이어에서 영상을 탐색하고 원하는 구간을 클립 후보로 저장하세요.</p>
               {youtubeId && <div className="source-details" role="status">
                 <strong>PREVIEW ONLY · 미디어 미확보</strong>
-                <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
+                <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft?.youtubeDuration ?? 0)}` : '영상 메타데이터 로딩 중'}</span>
                 <span>이 링크만으로 MP4를 만들 수 없습니다. 권한 있는 렌더 원본을 연결하는 기능은 YF-1에서 제공합니다.</span>
                 <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">원본 YouTube에서 열기 ↗</a>
               </div>}
