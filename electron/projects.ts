@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { AuthorizedSources } from './sources.js';
+import { youtubeVideoId } from '../src/shared/contracts.js';
+import { mappedClipRange, resolveYouTubeSource, validateBindSourceRequest,
+  type BindSourceRequest, type StoredMediaBinding } from '../src/shared/sources.js';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { app } from 'electron';
@@ -33,13 +37,16 @@ function assertRecord(input: unknown, id: string): ProjectRecord {
     youtubeDuration: candidate.youtubeDuration ?? null,
     clips: candidate.clips?.map((clip) => ({ ...clip, source: clip.source ?? 'local' })),
   }, candidate.asset?.duration ?? null);
-  return { ...candidate, ...edits, schemaVersion: 1 } as ProjectRecord;
+  return { ...candidate, ...edits, youtubeBinding: candidate.youtubeBinding ?? null,
+    schemaVersion: 1 } as ProjectRecord;
 }
 
 export class ProjectStore {
   private active: ProjectRecord | null = null;
   private connectedPath: string | null = null;
   private mediaGeneration = 0;
+  private sources = new AuthorizedSources();
+  private youtubeVerified = false;
 
   get activeProjectId(): string | null { return this.active?.id ?? null; }
 
@@ -68,11 +75,45 @@ export class ProjectStore {
     };
   }
 
+  get selectedClipSource(): 'local' | 'youtube' | null { return this.activeClip?.source ?? null; }
+
+  get youtubeBinding(): StoredMediaBinding | null { return this.active?.youtubeBinding ?? null; }
+
+  async renderableYouTubeSource(): Promise<{ id: string; path: string; duration: number; offset: number }> {
+    const clip = this.activeClip;
+    const binding = this.active?.youtubeBinding;
+    if (!clip || clip.source !== 'youtube' || !binding ||
+      !youtubeVideoId(this.active!.youtubeUrl) || binding.referenceVideoId !== youtubeVideoId(this.active!.youtubeUrl)) {
+      throw new Error('선택한 YouTube 클립에 연결된 원본이 없습니다.');
+    }
+    await this.sources.verify(binding, this.active!.youtubeDuration);
+    mappedClipRange(clip.start, clip.end, binding);
+    this.youtubeVerified = true;
+    return { id: binding.sourceAssetId, path: binding.localPath,
+      duration: binding.durationSeconds, offset: binding.startOffsetSeconds };
+  }
+
+  async assertYouTubePublishAllowed(): Promise<void> {
+    if (this.activeClip?.source !== 'youtube') return;
+    await this.renderableYouTubeSource();
+    const b = this.active?.youtubeBinding;
+    if (!b?.rights.allowRepost || !b.rights.allowedPlatforms.includes('youtube')) {
+      throw new Error('현재 권한 선언에는 YouTube 재게시 허가가 포함되지 않았습니다.');
+    }
+  }
+
   private view(): ProjectView {
     if (!this.active) throw new Error('먼저 프로젝트를 열어 주세요.');
-    const { asset, ...publicRecord } = this.active;
+    const { asset, youtubeBinding, ...publicRecord } = this.active;
+    const videoId = youtubeVideoId(this.active.youtubeUrl);
+    const youtubeSource = videoId ? resolveYouTubeSource({
+      videoId, url: this.active.youtubeUrl, durationSeconds: this.active.youtubeDuration,
+    }, youtubeBinding, this.youtubeVerified) : {
+      state: 'preview_only' as const, explanation: 'YouTube 링크를 입력해 주세요.',
+      binding: null, canRender: false, canPublishYouTube: false,
+    };
     return {
-      ...publicRecord,
+      ...publicRecord, youtubeSource,
       media: asset ? { ...this.mediaInfo(asset), previewUrl: this.connectedPath ? this.mediaInfo(asset).previewUrl : '' } : null,
       sourceStatus: !asset ? 'none' : this.connectedPath ? 'connected' : 'missing',
       sourceName: asset?.name ?? null,
@@ -127,11 +168,13 @@ export class ProjectStore {
     const record: ProjectRecord = {
       schemaVersion: 1, id: randomUUID(), title: '새 프로젝트',
       createdAt: now, updatedAt: now, revision: 0,
-      asset: null, youtubeUrl: '', youtubeDuration: null, clips: [], selectedClipId: null,
+      asset: null, youtubeUrl: '', youtubeDuration: null, youtubeBinding: null,
+      clips: [], selectedClipId: null,
     };
     await this.write(record);
     this.active = record;
     this.connectedPath = null;
+    this.youtubeVerified = false;
     return this.view();
   }
 
@@ -152,7 +195,12 @@ export class ProjectStore {
         // Missing, moved, or unreadable asset: project remains editable and reconnectable.
       }
     }
-    this.active = record;
+    const videoId = youtubeVideoId(record.youtubeUrl);
+    const matched = videoId && !record.youtubeBinding ? await this.sources.lookup(videoId) : null;
+    const current: ProjectRecord = { ...record, youtubeBinding: record.youtubeBinding ?? matched };
+    this.youtubeVerified = current.youtubeBinding ?
+      await this.sources.isVerified(current.youtubeBinding, current.youtubeDuration) : false;
+    this.active = current;
     this.connectedPath = connectedPath;
     this.mediaGeneration += 1;
     return this.view();
@@ -165,12 +213,33 @@ export class ProjectStore {
     if (edits.revision !== this.active.revision) {
       throw new Error('프로젝트가 변경되었습니다. 다시 열어 최신 버전을 확인해 주세요.');
     }
+    const before = youtubeVideoId(this.active.youtubeUrl);
+    const after = youtubeVideoId(edits.youtubeUrl);
+    const sameVideo = before !== null && before === after;
+    const binding = sameVideo ? this.active.youtubeBinding :
+      after ? await this.sources.lookup(after) : null;
+    this.youtubeVerified = binding ? await this.sources.isVerified(binding, edits.youtubeDuration) : false;
     const updated: ProjectRecord = {
-      ...this.active, ...edits, revision: this.active.revision + 1,
+      ...this.active, ...edits, youtubeBinding: binding, revision: this.active.revision + 1,
       updatedAt: new Date().toISOString(),
     };
     await this.write(updated);
     this.active = updated;
+    return this.view();
+  }
+
+  async bindYouTubeMedia(filePath: string, request: unknown): Promise<ProjectView> {
+    if (!this.active) throw new Error('먼저 프로젝트를 열어 주세요.');
+    const videoId = youtubeVideoId(this.active.youtubeUrl);
+    if (!videoId || !this.active.youtubeDuration) throw new Error('YouTube URL과 영상 길이를 먼저 확인해 주세요.');
+    const input: BindSourceRequest = validateBindSourceRequest(request);
+    const binding = await this.sources.createBinding(videoId, filePath, input, this.active.youtubeDuration);
+    const updated: ProjectRecord = { ...this.active, youtubeBinding: binding,
+      revision: this.active.revision + 1, updatedAt: new Date().toISOString() };
+    await this.write(updated);
+    this.active = updated;
+    this.youtubeVerified = true;
+    await this.sources.register(binding); // Registry enables subsequent URL-based automatic matching.
     return this.view();
   }
 

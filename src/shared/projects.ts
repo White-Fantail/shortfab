@@ -1,4 +1,5 @@
 import { youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
+import type { SourceResolution, StoredMediaBinding } from './sources.js';
 
 export type ClipSource = 'local' | 'youtube';
 
@@ -32,13 +33,15 @@ export interface ProjectRecord {
   asset: StoredAsset | null;
   youtubeUrl: string;
   youtubeDuration: number | null; // IFrame API metadata, not a renderable asset.
+  youtubeBinding: StoredMediaBinding | null; // Main process only.
   clips: ProjectClip[];
   selectedClipId: string | null;
 }
 
 export type SourceStatus = 'none' | 'connected' | 'missing';
 
-export interface ProjectView extends Omit<ProjectRecord, 'asset'> {
+export interface ProjectView extends Omit<ProjectRecord, 'asset' | 'youtubeBinding'> {
+  youtubeSource: SourceResolution;
   media: MediaInfo | null;
   sourceStatus: SourceStatus;
   sourceName: string | null;
