@@ -1,6 +1,6 @@
 # 아키텍처 · 도메인 모델 (초기 설계)
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 핵심 동작 사용자 확인, Phase 1 로컬 프로젝트 저장 1차 구현 중**. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 핵심 동작 및 Phase 1 로컬 프로젝트/클립 첫 기능 묶음 사용자 확인 완료**. Phase 1 전체는 순차 개발 중. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
 
 ## 시스템 경계
 
@@ -93,4 +93,4 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 - `project:list/create/open/save`와 `project:pickMedia/reconnectMedia`만 preload로 노출합니다. 기존 `render:start`의 sourceId와 로컬 경로 검증은 유지합니다.
 - 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.
 - Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.
-- **검증 상태:** 단위 테스트 코드 추가, 실제 앱 실행·CI·OS별 재연결/원자 저장 동작은 확인 대기.
+- **검증 상태:** 첫 기능 묶음 사용자 확인, CI 타입 검사·린트·단위 테스트·빌드 통과. OS별 설치·비정상 종료·파일 경합·저장 실패 시나리오는 추가 검증 과제.

@@ -1,6 +1,6 @@
 # ShortFab 개발환경 · Phase 0 확인 · Phase 1 저장/복원 검증
 
-상태: 2026-10-22 **Phase 0 핵심 흐름 사용자 확인 / Phase 1 프로젝트 저장 기능 코드 추가, 통합 테스트 대기**.
+상태: 2026-10-22 **Phase 0 핵심 흐름 및 Phase 1 프로젝트·클립 첫 기능 묶음 사용자 확인 완료**. CI 타입 검사·린트·단위 테스트·빌드 통과, OS별 실기 및 예외/경합 테스트는 후속 과제.
 
 ## 요구사항
 
@@ -53,7 +53,7 @@ npm run build
 - Electron 앱 사용자 데이터 폴더 아래 `projects/{projectId}.json`에 프로젝트 메타데이터와 클립 편집값을 저장합니다. 원본 영상을 복사하지 않고 절대 경로·파일 크기·길이·해상도를 내부 JSON에 보관합니다. 저장 시 임시 파일 → 교체를 사용합니다.
 - 렌더러에는 원본의 실제 경로를 보내지 않고 `ProjectView` 및 `shortfab-media://` 프리뷰 URL만 제공합니다. IPC는 임의 프로젝트 파일 경로나 임의 렌더 입력 파일 경로를 허용하지 않습니다.
 - 원본이 이동되거나 없어지면 `missing`으로 열리고 연결 복구 전에는 렌더가 비활성화됩니다. 파일 크기·길이·해상도 비교는 **완전한 암호학적 파일 동일성 검사가 아니며**, 정밀한 fingerprint 검사는 추후 과제입니다.
-- Phase 1 저장 코드와 새 테스트는 커밋되지만 실제 `npm install` / `npm run check` / `npm test` 및 앱 재시작 검증 결과를 확인하기 전에는 통과로 표시하지 않습니다.
+- Phase 1 프로젝트 저장·재열기/클립 후보/원본 재연결 기본 흐름은 사용자 확인으로 **완료** 처리했습니다. GitHub Actions에서 `npm install`, `npm run check`, `npm run lint`, `npm test`, `npm run build`가 통과했습니다 ([CI run](https://github.com/White-Fantail/shortfab/actions/runs/39657881821)). 위 8–10번의 모든 오류·경합 경계 사례 및 OS별 실기 검증까지 완료되었다는 의미는 아닙니다.
 
 ## 패키징
 

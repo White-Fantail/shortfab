@@ -1,6 +1,6 @@
 # UX · 화면/작업 흐름 명세
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **요구사항 명세**. Phase 0 기본 출력 경로는 사용자가 확인. Phase 1에 프로젝트 목록·자동 저장·재열기·다중 후보·원본 재연결 UI 코드가 추가되었으며 앱 통합 검증은 대기. 자막·CTA·출판은 미구현.
+상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **요구사항 명세**. Phase 0 기본 출력 및 Phase 1 첫 UI 기능 묶음(프로젝트 목록·자동 저장·재열기·다중 후보·원본 재연결)은 사용자 확인 완료. OS별 실기 및 오류·경합 경계 사례는 추가 검증 과제. 자막·CTA·출판은 미구현.
 
 ## Quick Create (기본 사용자 경험)
 
