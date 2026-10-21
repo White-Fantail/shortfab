@@ -4,6 +4,7 @@ import type { ProjectClip, ProjectEdits, ProjectSummary, ProjectView } from './s
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
 type SourceTab = 'local' | 'youtube';
+type OutputTab = 'export' | 'publish';
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return '00:00';
@@ -24,6 +25,7 @@ function App() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>('local');
+  const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
   const [rendering, setRendering] = useState(false);
@@ -316,7 +318,8 @@ function App() {
       setStatus(result.status === 'completed' ? `완료: ${result.outputPath}` : '내보내기가 취소되었습니다.');
       if (result.status === 'completed') {
         await refreshPublishing();
-        setPublishMessage('MP4가 준비되었습니다. 아래 YouTube 게시 설정을 확인해 주세요.');
+        setPublishMessage('MP4가 준비되었습니다. YouTube 게시 설정을 확인해 주세요.');
+        setOutputTab('publish');
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -465,7 +468,19 @@ function App() {
           </div>
         </main>
 
-        <aside className="export-panel">
+        <aside className="export-panel" aria-label="출력 및 게시 설정">
+          <div className="output-tabs" role="tablist" aria-label="출력 작업">
+            <button id="output-export-tab" role="tab" type="button"
+              aria-selected={outputTab === 'export'} aria-controls="output-export-panel"
+              className={outputTab === 'export' ? 'active' : ''}
+              onClick={() => setOutputTab('export')}>MP4 익스포트</button>
+            <button id="output-publish-tab" role="tab" type="button"
+              aria-selected={outputTab === 'publish'} aria-controls="output-publish-panel"
+              className={outputTab === 'publish' ? 'active' : ''}
+              onClick={() => setOutputTab('publish')}>YouTube 게시</button>
+          </div>
+          <section id="output-export-panel" role="tabpanel" aria-labelledby="output-export-tab"
+            className="output-tab-content" hidden={outputTab !== 'export'}>
           <p className="eyebrow">04 — EXPORT</p>
           <h2>MP4 내보내기</h2>
           <div className="export-spec"><span>형식</span><strong>MP4</strong></div>
@@ -481,7 +496,9 @@ function App() {
             <div className="progress-track"><div style={{ width: `${progress.percent}%` }} /></div></div>
           <p className="status" aria-live="polite">{status}</p>
           {error && <p role="alert" className="error">{error}</p>}
-          <div className="section-rule" />
+          </section>
+          <section id="output-publish-panel" role="tabpanel" aria-labelledby="output-publish-tab"
+            className="output-tab-content" hidden={outputTab !== 'publish'}>
           <p className="eyebrow">05 — PUBLISH · YOUTUBE</p>
           <h2>YouTube 업로드</h2>
           <p className="hint">MP4 익스포트와 YouTube 게시 승인은 별개입니다. 연결된 Google 계정으로 공식 API를 이용해 업로드합니다.</p>
@@ -551,6 +568,7 @@ function App() {
           </div>}
           <div className="coming-next"><strong>게시 제한 및 수동 업로드</strong>
             <p>API 연결이 불가능하거나 상태 확인이 필요하면 출력한 MP4를 YouTube Studio에서 직접 업로드하세요. 처리 완료는 전체 공개를 보장하지 않습니다.</p></div>
+          </section>
         </aside>
       </div>
     </div>
