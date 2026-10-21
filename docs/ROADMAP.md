@@ -53,11 +53,21 @@
 
 ## Phase 2 — 공식 YouTube 배포 P0
 
-- [ ] 최소 OAuth 권한 요청, 계정 연결/해제, 시크릿 안전 보관
-- [ ] 사용자 승인 → YouTube 업로드 → 처리/게시 상태 확인
-- [ ] 인증 만료·업로드 실패·중복 방지·수동 파일 게시 fallback
+- [x] 최소 `youtube.upload` 권한, 시스템 브라우저+PKCE OAuth 계정 연결/해제, OS 암호화 저장소 — **코드 추가, 실계정·OS 검증 대기**
+- [x] MP4 렌더 완료 → 메인 프로세스 게시 승인 → YouTube resumable 업로드 → 처리 상태 수동 조회 — **코드 추가, 실업로드 미검증**
+- [x] 액세스 토큰 갱신, 8 MiB 분할 업로드/세션 복구, 영상 해시 검사, 중복 작업 차단, 수동 파일 업로드 안내 — **코드 추가, 장애/종단 간 검증 대기**
+- [ ] 테스트 사용자로 연결/비공개 영상 게시/처리 완료 URL 확인
+- [ ] Google API 권한·쿼터/심사 및 OS별 테스트, 만료·네트워크 복구 통합 검증
 
-**Exit:** 테스트 계정으로 승인된 영상 게시 후 게시 URL과 상태를 정확히 기록.
+**Exit (아직 미달성):** 테스트 계정으로 승인된 영상 게시 후 게시 URL과 상태를 정확히 기록.
+
+### Phase 2 첫 구현 기록 (2026-10-22)
+
+- `electron/youtube.ts`: Google Desktop OAuth PKCE/S256·127.0.0.1 callback, `safeStorage` 암호화 credential+job vault, `videos.insert` 재개 업로드, `videos.list` 처리 상태 확인.
+- `src/shared/publishing.ts`, `src/shared/publishing.test.ts`: 게시 메타데이터, 작업 상태, Range 응답 검증과 단위 테스트.
+- `src/App.tsx`: YouTube 계정/공개 범위/아동용 여부, MP4 익스포트 이후 별도 승인을 통한 업로드, 이력/재시도/상태 새로고침.
+- 재실행 뒤 진행 중이던 업로드는 자동 재개/재삽입하지 않습니다. 기존 세션 검증/명시적 재시도만 허용하고 세션 불명 시 YouTube Studio 확인을 우선합니다.
+- 설정/제약/테스트 시나리오는 [PHASE2_YOUTUBE.md](PHASE2_YOUTUBE.md)를 참조하세요. **계정 연동·게시 API 시험 전에는 완료로 표시하지 않습니다.**
 
 ## Phase 3 — AI 추천·Trend Studio·CTA 고도화 P1
 
