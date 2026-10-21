@@ -3,7 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { createWriteStream } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { request } from 'node:https';
-import { basename, extname, join } from 'node:path';
+import { extname, join } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { app } from 'electron';
@@ -99,7 +99,9 @@ export async function importApprovedFile(rawUrl: string, expectedHash: string): 
   } catch (cause) {
     // Never leak signed URL, access tokens or sensitive response bodies into UI.
     if (controller.signal.aborted) throw new Error('원본 다운로드 시간이 초과되었습니다 (120초).');
-    throw cause;
+    const message = cause instanceof Error ? cause.message : '';
+    if (/^(허가|원본|다운로드|클라우드)/.test(message)) throw cause;
+    throw new Error('승인된 원본 연결에 실패했습니다. URL 유효기간·호스트·네트워크를 확인하세요.');
   } finally {
     clearTimeout(timer);
     await rm(partial, { force: true }).catch(() => {});
