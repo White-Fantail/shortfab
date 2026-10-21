@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join } from 'node:path';
 import { app } from 'electron';
 import { probeMedia } from './media.js';
-import { hasActiveRights, type BindSourceRequest, type StoredMediaBinding } from '../src/shared/sources.js';
+import { hasActiveRights, type BindSourceRequest, type SourceProvider, type StoredMediaBinding } from '../src/shared/sources.js';
 
 const catalogDir = () => join(app.getPath('userData'), 'sources', 'approved');
 const idPattern = /^[a-zA-Z0-9_-]{11}$/;
@@ -36,7 +36,7 @@ function isStoredBinding(raw: unknown, videoId: string): raw is StoredMediaBindi
 
 export class AuthorizedSources {
   async createBinding(videoId: string, localPath: string, request: BindSourceRequest,
-    youtubeDuration: number): Promise<StoredMediaBinding> {
+    youtubeDuration: number, provider: SourceProvider = 'creator_file'): Promise<StoredMediaBinding> {
     if (!idPattern.test(videoId) || !isAbsolute(localPath)) throw new Error('영상 ID 또는 파일 경로가 올바르지 않습니다.');
     const checked = await stat(localPath);
     if (!checked.isFile() || !checked.size || checked.size > 8 * 1024 ** 3) {
@@ -51,7 +51,7 @@ export class AuthorizedSources {
       throw new Error('권리자가 제공한 SHA-256 체크섬이 실제 원본과 다릅니다.');
     }
     const binding: StoredMediaBinding = {
-      referenceVideoId: videoId, sourceAssetId: randomUUID(), provider: 'creator_file',
+      referenceVideoId: videoId, sourceAssetId: randomUUID(), provider,
       fileName: basename(localPath), localPath, durationSeconds: info.duration,
       sizeBytes: checked.size, sha256: digest, startOffsetSeconds: request.startOffsetSeconds,
       rights: {
