@@ -83,6 +83,9 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
   const clips: ProjectClip[] = value.clips.map((clip) => {
     const source = clip?.source ?? 'local'; // Older projects have local clips with no discriminator.
     const limit = source === 'youtube' ? youtubeDuration : sourceDuration;
+    if (source === 'local' && sourceDuration === null) {
+      throw new Error('영상 원본을 먼저 연결해 주세요.');
+    }
     if (!clip || (source !== 'youtube' && source !== 'local') ||
       (source === 'youtube' && (!youtubeVideoId(value.youtubeUrl!) || youtubeDuration === null)) ||
       (source === 'local' && sourceDuration === null) ||
