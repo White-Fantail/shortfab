@@ -94,3 +94,12 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 - 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.
 - Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.
 - **검증 상태:** 첫 기능 묶음 사용자 확인, CI 타입 검사·린트·단위 테스트·빌드 통과. OS별 설치·비정상 종료·파일 경합·저장 실패 시나리오는 추가 검증 과제.
+
+## Phase 2 YouTube 공식 업로드 구현 경계 (2026-10-22)
+
+- `electron/youtube.ts`는 OAuth/토큰 갱신, 전용 암호화 작업 저장소, Google `videos.insert`/분할 업로드 및 `videos.list` 상태 확인을 담당합니다. 렌더러에는 요청/상태 조회만 제공하며 토큰·업로드 URL·로컬 파일 시스템 경로는 노출하지 않습니다.
+- 승인 없는 자동 업로드는 없습니다. `render:start` 완료가 업로드를 호출하지 않으며, 별도 `publish:start` 요청에서 메인 프로세스 OS 대화상자로 파일·제목·공개 범위·아동용 설정을 보여주고 승인한 후 업로드합니다.
+- 업로드 가능한 로컬 파일은 **메인 프로세스에서 검증한 마지막 성공 MP4**뿐입니다. 현재 프로젝트/클립 구간/해상도와 일치하지 않으면 게시할 수 없습니다. 재개할 경우 해당 영상 파일의 크기·SHA-256과 OAuth 연결 세대 ID가 일치해야 합니다.
+- 서버가 업로드를 받은 뒤 응답이 끊길 수 있으므로 세션 URI를 `safeStorage`로 암호화해 기록합니다. 중단/복구 시 YouTube `308 Range`를 먼저 확인하고 새 `videos.insert` 요청은 자동 생성하지 않습니다. 세션 만료나 완료 ID 불명은 사용자에게 YouTube Studio 점검을 요청합니다.
+- 상태는 `uploading → processing → published | action_required` 또는 `failed`이며 `published`는 원격 처리 성공을 뜻하고 **전체 공개나 Shorts 분류를 의미하지 않습니다**. UI에는 게시 이력과 재확인/이어올리기 버튼을 제공합니다.
+- 구체적인 설정과 출시 게이트는 [PHASE2_YOUTUBE.md](PHASE2_YOUTUBE.md). **Google 실계정 연동/CI/OS별 앱 실행 검증 이전이므로 Phase 2 완료 상태는 아닙니다.**
