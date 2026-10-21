@@ -7,13 +7,13 @@
 > **핵심 제품 목표:** 사용자는 원본 영상을 직접 촬영하거나 보유하지 않는다. YouTube URL로 기존 영상 구간을 고르고, 필요한 권리 및 인코딩 가능한 원본이 확보된 경우 숏폼 MP4를 제작해야 한다. 로컬 파일 기반 Phase 0/1 성공 및 YouTube **업로드** Phase 2 진행은 이 게이트의 완료를 의미하지 않는다.
 
 - [ ] **YF-0**: YouTube URL 기본 소스·IFrame Player API 실제 시각/seek/IN·OUT/루프/후보 마커 저장·재열기. **코드 구현 (2026-10-22), CI 및 앱 실기 검증 대기**. 미디어 미확보 시 preview-only 명시
-- [ ] **YF-1**: YouTubeReference / RightsGrant / MediaBinding / SourceResolver 계약·상태 및 승인된 클라우드/권리자 파일 연결, 싱크 검증 — **권리자 로컬 파일·SHA-256·오프셋·권한 체크·동일 ID 자동 재매칭 코드 통합**. 승인 클라우드 어댑터/실영상 3개 MP4 수용 시험 미완료
+- [ ] **YF-1**: YouTubeReference / RightsGrant / MediaBinding / SourceResolver 계약·상태 및 승인된 클라우드/권리자 파일 연결, 싱크 검증 — **로컬 승인 원본 + allowlist HTTPS 직접 미디어 파일 어댑터 구현**. 다운로드 SHA-256/호스트·크기·시간 제한 코드 포함. 실제 승인 클라우드·OS 통합/콘텐츠 동일성/실영상 3개 MP4 검증 미완료
 - [ ] **YF-1 Exit**: 사용자가 촬영하지 않은 YouTube 시험 영상의 URL로 시작해서, 재편집/게시 권한과 별도 제공된 적법한 원본을 자동 매핑하여 **클립 3개를 MP4로 익스포트**하고 재열기
 - [ ] **YF-2**: 사용자 수동 파일 선택을 줄일 파트너·권리자 제공 원본 자동 연동 및 권한 만료/삭제/동기화 실패 UX
 - [ ] **YF-3 (조건부)**: 공식 YouTube Clips/Remix 공유 UX. 비공식 추출기 경로는 별도 법률/YouTube 정책·서면 승인 평가 및 ADR 후 결정
 - [ ] **사업/출시 게이트**: "임의의 YouTube 공개 링크만으로 항상 MP4 변환" 불가 가능성을 사용자에게 명시하고, 적법한 소스 확보 성공률을 실제 시험 데이터로 측정
 
-**현재 상태: YF-0 코드 및 YF-1 승인 로컬 원본 연결 코드·CI 통과. YF-0 실기, YF-1 원격 원본 자동 취득/동일성 검증/3개 MP4 Exit 미완료.** 정확한 구현·수용 기준은 [YouTube-first 설계](YOUTUBE_FIRST_WORKFLOW.md)와 [ADR-0002](adr/0002-youtube-first-source-acquisition.md)를 참조.
+**현재 상태: YF-0 탐색 코드 및 YF-1 로컬·승인 HTTPS 원본 연결 코드 구현. 실영상 URL/권리자 저장소 매핑, OS 테스트, 동영상 내용 동일성 검증과 3개 MP4 Exit 미완료.** 정확한 구현·수용 기준은 [YouTube-first 설계](YOUTUBE_FIRST_WORKFLOW.md)와 [ADR-0002](adr/0002-youtube-first-source-acquisition.md)를 참조.
 
 ## Phase 0 — 기술 검증 및 개발 기반
 
@@ -69,6 +69,13 @@
 - 프로젝트에 실제 파일 경로를 비공개 보관하며 클립 탐색 시각을 원본 시각으로 매핑합니다. 권리 만료·SHA 변경·소스 분실을 차단하고 YouTube 게시 허가를 별도 확인합니다.
 - GUI: 권리자·증빙 참조·권리 체크박스·만료일·오프셋·SHA-256 및 원본 파일 선택. 연결 후 같은 videoId를 새 프로젝트에서 자동 재매칭합니다.
 - **실영상 내용 동일성/법적 허가 진위는 체크섬만으로 증명할 수 없습니다.** 원격 승인 클라우드 원본 공급자와 실영상 3개 MP4 종단 간 검증은 미완료. [YF-1 상세/검증표](YF1_AUTHORIZED_SOURCES.md).
+
+### YouTube-first YF-1 승인 HTTPS 원본 연결 (2026-10-22)
+
+- `SHORTFAB_APPROVED_SOURCE_HOSTS`를 통한 정확한 호스트 allowlist에 한해 직접 다운로드할 수 있는 HTTPS 미디어 URL을 지원합니다. YouTube 영상 URL 자체를 다운로드하지 않습니다.
+- 권리자 제공 SHA-256이 필수이며, HTTPS TLS 검사·공개 IPv4 DNS 고정·리다이렉트 거부·120초 타임아웃·최대 2 GiB·응답 파일 포맷·해시 검사를 거쳐 사용자 데이터 디렉터리에 미디어를 보관합니다.
+- 다운로드된 파일은 기존 `AuthorizedSources`/프로젝트 `MediaBinding`으로 연결되어 영상 구간·권리 만료·해시 검증 및 MP4 익스포트 절차를 재사용합니다.
+- **미완료:** 실제 제휴 저장소의 인증·URL 갱신, 파트너 매니페스트 서명, videoId↔영상 내용 동일성, 클라우드 E2E 시험, 3개 MP4 실제 출력. 설정된 외부 호스트/시험 권리자 미디어가 없으면 직접 증명할 수 없습니다.
 
 ### Phase 1 첫 구현 기록 (2026-10-22)
 
