@@ -82,3 +82,11 @@ npm run build
 **YF-0 실기 수용 검증 및 YF-1 SourceResolver 구현**이 우선입니다. 검증 기록에는 videoId·재생 성공/실패·길이·클립 3개 저장 복원·YouTube URL 교체·MP4 차단 여부를 기록합니다. 개발 모드에서 정상 동작해도 패키징된 Electron의 `file://` origin/YouTube 임베드 제한을 반드시 따로 검증합니다.
 
 Phase 2 Google 인증/실제 비공개 업로드/상태·재개 통합 테스트와 Phase 1 저장/재열기 앱 통합 검증, YouTube IFrame API 타임코드 탐색, FFmpeg 배포 검증. 이후 Composition 스타일·자막·오디오·CTA·버전 스냅샷을 개발합니다.
+
+## YF-1 승인 원본 테스트 (코드 완료, 실기 미완료)
+
+YouTube URL로 실제 클립 3개를 먼저 저장합니다. 권리자 제공 파일의 허가 증빙 참조, 발췌/변형 편집 권한, 필요시 재게시 권한을 명시합니다. SHA-256 값이 있으면 등록 전에 입력하고, 원본 길이와 시작 오프셋이 YouTube 마커 시간대를 포괄하는지 확인합니다. Electron에서 파일을 선택한 뒤 MP4를 출력합니다.
+
+같은 videoId를 다른 프로젝트에 넣으면 `userData/sources/approved/{videoId}.json`에 보관된 연결을 자동 재검증합니다. 소스를 변경/삭제하거나 권리를 만료시키면 렌더/업로드를 차단해야 합니다. 오프셋은 `sourceTime = youtubeTime + offsetSeconds`입니다. 3개 MP4의 실제 FFprobe 길이/화면·프레임/오디오 및 YouTube 원본 콘텐츠 일치 여부는 별도 수동 검증이 필요합니다.
+
+로컬 파일 검증 결과는 권리자와 실제 라이선스 및 YouTube 영상과의 내용 동일성을 *자동 보증하지 않습니다*. 사용자 선언을 기술적 권리 증명으로 취급하지 마세요. 승인 클라우드 스토리지 자동 취득은 다음 작업입니다. [상세 체크리스트](YF1_AUTHORIZED_SOURCES.md).
