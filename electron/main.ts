@@ -4,6 +4,7 @@ import { join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { RenderTask } from './render.js';
+import { YouTubePublisher } from './youtube.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 
 protocol.registerSchemesAsPrivileged([
@@ -14,9 +15,12 @@ let mainWindow: BrowserWindow | null = null;
 const projects = new ProjectStore();
 let currentTask: RenderTask | null = null;
 let renderBusy = false;
+const publisher = new YouTubePublisher((job) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('publish:progress', { job });
+});
 
 function requireIdle(): void {
-  if (renderBusy) throw new Error('렌더링이 끝나면 프로젝트나 원본을 변경할 수 있습니다.');
+  if (renderBusy || publisher.isBusy) throw new Error('진행 중인 렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -83,12 +87,63 @@ app.whenReady().then(() => {
     return projects.attachMedia(file, true);
   });
 
+  ipcMain.handle('publish:overview', () => publisher.overview());
+  ipcMain.handle('publish:connect', () => { requireIdle(); return publisher.connect(); });
+  ipcMain.handle('publish:disconnect', async () => {
+    requireIdle();
+    const choice = await dialog.showMessageBox({
+      type: 'warning', title: 'YouTube 연결 해제',
+      message: 'ShortFab에서 YouTube 권한을 해제하시겠습니까?',
+      detail: '업로드 기록은 남습니다. Google 계정의 앱 액세스도 확인해 주세요.',
+      buttons: ['취소', '연결 해제'], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    return choice.response === 1 ? publisher.disconnect() : publisher.overview();
+  });
+  ipcMain.handle('publish:start', async (_event, metadata: unknown) => {
+    requireIdle();
+    const projectId = projects.activeProjectId;
+    if (!projectId) throw new Error('프로젝트를 먼저 여세요.');
+    // Approval is in the privileged main process, not an implicit side effect of export.
+    const choice = await dialog.showMessageBox({
+      type: 'question', title: 'YouTube 업로드 최종 승인',
+      message: '현재 MP4를 연결된 YouTube 계정으로 업로드할까요?',
+      detail: '공개 범위 및 대상 아동 여부를 확인하세요. 이 버튼은 외부 업로드를 시작합니다.',
+      buttons: ['취소', '업로드 승인'], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    if (choice.response !== 1) return null;
+    return publisher.start(metadata, projectId);
+  });
+  ipcMain.handle('publish:retry', async (_event, id: string) => {
+    requireIdle();
+    const projectId = projects.activeProjectId;
+    if (!projectId) throw new Error('프로젝트를 먼저 여세요.');
+    const choice = await dialog.showMessageBox({
+      type: 'warning', title: '기존 업로드 이어서 진행',
+      message: '기존 YouTube 업로드 세션을 확인하고 이어서 전송할까요?',
+      detail: '새 영상을 중복 생성하지 않고, 이전 업로드 세션을 재사용합니다.',
+      buttons: ['취소', '재시도 승인'], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    if (choice.response !== 1) return null;
+    return publisher.retry(id, projectId);
+  });
+  ipcMain.handle('publish:refresh', (_event, id: string) => {
+    const projectId = projects.activeProjectId;
+    if (!projectId) throw new Error('프로젝트를 먼저 여세요.');
+    return publisher.refresh(id, projectId);
+  });
+
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
     if (renderBusy) throw new Error('이미 렌더링 중입니다.');
     const source = projects.activeSource;
     if (!source) throw new Error('로컬 원본 영상을 먼저 연결하거나 재연결하세요.');
     const request = validateRenderRequest(input, source.info.duration);
     if (request.sourceId !== source.id) throw new Error('원본이 변경되었습니다. 다시 선택하세요.');
+    const activeClip = projects.activeClip;
+    const projectId = projects.activeProjectId;
+    if (!projectId || !activeClip || activeClip.start !== request.start ||
+      activeClip.end !== request.end || activeClip.width !== request.width) {
+      throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
+    }
     renderBusy = true;
     try {
       const base = parse(source.info.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
@@ -109,6 +164,7 @@ app.whenReady().then(() => {
           mainWindow.webContents.send('render:progress', progress);
         }
       });
+      await publisher.recordRender(path, projectId, activeClip.id);
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
