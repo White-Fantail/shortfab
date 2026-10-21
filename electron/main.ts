@@ -3,6 +3,7 @@ import type { OpenDialogOptions, SaveDialogOptions } from 'electron';
 import { join, parse } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
+import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
 import { YouTubePublisher } from './youtube.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
@@ -101,6 +102,14 @@ app.whenReady().then(() => {
     requireIdle();
     sourceBusy = true;
     try { return await projects.bindCloudSource(payload); }
+    finally { sourceBusy = false; }
+  });
+
+  ipcMain.handle('partner:status', () => ({ configured: partnerCatalogConfigured() }));
+  ipcMain.handle('project:bindPartner', async () => {
+    requireIdle();
+    sourceBusy = true;
+    try { return await projects.bindPartnerSource(); }
     finally { sourceBusy = false; }
   });
 
