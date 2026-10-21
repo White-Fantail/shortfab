@@ -88,7 +88,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   position: sticky;
-  top: -20px;
+  top: 0;
   z-index: 2;
   margin: -20px -20px 20px;
   padding: 14px 20px 12px;
@@ -140,3 +140,9 @@
   .export-panel { border-left: 0; border-top: 1px solid #30313a; }
   .output-tabs { position: static; }
 }
+
+/* Give actual editing tools more vertical room instead of oversized chrome. */
+.topbar { height: 62px; padding: 0 24px; }
+.project-bar { min-height: 56px; padding: 8px 24px; }
+.sidebar h2, .export-panel h2 { margin-bottom: 14px; }
+.sidebar .section-rule { margin: 20px 0; }
