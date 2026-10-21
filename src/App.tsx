@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { youtubeVideoId, type RenderProgress } from './shared/contracts';
 import { YouTubePreview, type YouTubeControls } from './YouTubePreview';
 import type { ProjectClip, ProjectEdits, ProjectSummary, ProjectView } from './shared/projects';
+import type { BindSourceRequest } from './shared/sources';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
 type SourceTab = 'local' | 'youtube';
@@ -27,6 +28,10 @@ function App() {
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>('youtube');
   const [loopClip, setLoopClip] = useState(false);
+  const [rightsForm, setRightsForm] = useState<BindSourceRequest>({
+    rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
+    allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
+  });
   const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
@@ -59,14 +64,22 @@ function App() {
   const validClip = Boolean(clip && sourceDuration !== null &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
     clip.start >= 0 && clip.end >= clip.start + 0.2 && clip.end <= sourceDuration + 0.02);
-  const canRender = validClip && clip?.source === 'local' && sourceConnected && sourceTab === 'local' && !rendering && !busy && !publishingBusy;
+  const linked = project?.youtubeSource;
+  const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
+    ? linked.binding : null;
+  const canRender = validClip && !rendering && !busy && !publishingBusy && (
+    (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
+    (sourceTab === 'youtube' && clip?.source === 'youtube' && !!linkedAsset)
+  );
   const publishReady = publishing?.artifact?.projectId === project?.id &&
     publishing?.artifact?.clipId === clip?.id &&
     publishing?.artifact?.start === clip?.start &&
     publishing?.artifact?.end === clip?.end &&
     publishing?.artifact?.width === clip?.width;
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
-  const canPublish = publishReady && publishing?.connected && !dirty && !rendering && !busy &&
+  const canPublish = publishReady &&
+    (clip?.source !== 'youtube' || (linked?.canPublishYouTube && linkedAsset !== null)) &&
+    publishing?.connected && !dirty && !rendering && !busy &&
     !publishingBusy && publishForm.madeForKids !== null && Boolean(publishForm.title.trim());
 
   function applyView(view: ProjectView) {
@@ -261,6 +274,22 @@ function App() {
     }
   }
 
+  async function bindAuthorizedSource() {
+    if (!window.shortfab || !youtubeId || !draft?.youtubeDuration || rendering || busy || publishingBusy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await flushEdits();
+      const updated = await window.shortfab.bindYouTubeMedia(rightsForm);
+      if (!updated) return;
+      applyView(updated);
+      setSourceTab('youtube');
+      setStatus('YouTube ID와 원본 체크섬을 연결했습니다. 법적 권리는 사용자 확인 사항입니다.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  }
+
   function selectSource(next: SourceTab) {
     setSourceTab(next);
     setPlayhead(0);
@@ -349,7 +378,10 @@ function App() {
   }
 
   async function renderClip() {
-    if (!canRender || !media || !clip || !window.shortfab) return;
+    if (!canRender || !clip || !window.shortfab) return;
+    const renderAssetId = clip.source === 'youtube' ? linkedAsset?.sourceAssetId : media?.id;
+    const offset = clip.source === 'youtube' ? linkedAsset?.startOffsetSeconds ?? 0 : 0;
+    if (!renderAssetId) return;
     setError('');
     setRendering(true);
     setProgress({ percent: 0, seconds: 0 });
@@ -357,7 +389,7 @@ function App() {
     try {
       await flushEdits();
       const result = await window.shortfab.startRender({
-        sourceId: media.id, start: clip.start, end: clip.end, width: clip.width,
+        sourceId: renderAssetId, start: clip.start + offset, end: clip.end + offset, width: clip.width,
       });
       setStatus(result.status === 'completed' ? `완료: ${result.outputPath}` : '내보내기가 취소되었습니다.');
       if (result.status === 'completed') {
