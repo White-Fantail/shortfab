@@ -400,8 +400,8 @@ function App() {
           <input id="project-title" value={draft?.title ?? ''} disabled={!draft || busy || rendering}
             onChange={(event) => changeDraft((current) => ({ ...current, title: event.target.value }))} />
           <div className="tab-group source-tabs">
-            <button className={sourceTab === 'local' ? 'active' : ''} onClick={() => selectSource('local')}>로컬 원본</button>
             <button className={sourceTab === 'youtube' ? 'active' : ''} onClick={() => selectSource('youtube')}>YouTube 탐색</button>
+            <button className={sourceTab === 'local' ? 'active' : ''} onClick={() => selectSource('local')}>로컬 원본</button>
           </div>
           {sourceTab === 'local' ? (
             <section className="pane">
@@ -440,7 +440,7 @@ function App() {
           <h2>클립 후보</h2>
           <div className="clip-choices">
             {visibleClips.map((item) => <button key={item.id}
-              className={draft.selectedClipId === item.id ? 'clip-choice selected' : 'clip-choice'}
+              className={draft?.selectedClipId === item.id ? 'clip-choice selected' : 'clip-choice'}
               disabled={busy || rendering}
               onClick={() => { changeDraft((current) => ({ ...current, selectedClipId: item.id })); moveTo(item.start); }}>
               <strong>{item.title}</strong><small>{formatTime(item.start)}–{formatTime(item.end)}</small>
