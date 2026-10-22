@@ -14,7 +14,7 @@ ffmpeg -version
 
 모델(필수): https://huggingface.co/ggerganov/whisper.cpp/tree/main
 
-ShortFab **자막 편집 → 기본 한국어·영어 모델 설치 (약 148MB)**를 클릭하면 공식 배포처의 `ggml-base.bin` 다국어 모델을 내려받아 로컬에 설치합니다. 사용자의 클릭 **전에는 아무 다운로드도 시작하지 않습니다**. 진행률과 **모델 다운로드 취소**를 지원하고, 동일 SHA-256이 확인된 캐시는 재사용합니다. 기존 `ggml-base.bin` 또는 `ggml-small.bin` 등의 **GGML 다국어** 모델(.bin)을 직접 내려받았다면 **다른 GGML 모델 파일 선택…**을 사용하세요. `*.en.bin`은 영어 전용이므로 한국어에는 사용하지 마세요.
+ShortFab **자막 편집 → 기본 한국어·영어 모델 설치 (약 148MB)**를 클릭하면 공식 배포처의 `ggml-base.bin` 다국어 모델을 내려받아 로컬에 설치합니다. 사용자의 클릭 **전에는 아무 다운로드도 시작하지 않습니다**. 진행률과 **모델 다운로드 취소**, 다운로드 최대 15분 제한을 지원하고, 동일 SHA-256이 확인된 캐시는 재사용합니다. 기존 `ggml-base.bin` 또는 `ggml-small.bin` 등의 **GGML 다국어** 모델(.bin)을 직접 내려받았다면 **다른 GGML 모델 파일 선택…**을 사용하세요. `*.en.bin`은 영어 전용이므로 한국어에는 사용하지 마세요.
 
 Windows는 `whisper-cli.exe`, `ffmpeg.exe` 설치/경로 구성이 필요합니다. 환경변수 `SHORTFAB_WHISPER_PATH`, `SHORTFAB_FFMPEG_PATH`, `SHORTFAB_WHISPER_MODEL_PATH`를 각각 CLI, FFmpeg, 모델의 경로에 지정할 수 있습니다. 모델 경로는 Electron 사용자 데이터 폴더의 `settings/stt.json`에 로컬 저장하며 UI에는 파일명만 표시됩니다. 환경변수 모델 지정이 있으면 그 경로가 우선합니다.
 
