@@ -5,6 +5,7 @@ import type { BindSourceRequest } from '../src/shared/sources.js';
 import type { ApprovedCloudSourceRequest } from '../src/shared/cloud.js';
 import type { PublishDraft, PublishJobView, PublishOverview, PublishProgress } from '../src/shared/publishing.js';
 import type { SttProgress, SttRequest, SttResult, SttStatus } from '../src/shared/stt.js';
+import type { AnalyzeProgress, AnalyzeRequest, AnalyzeResult, ClipAnalysis } from '../src/shared/recommendations.js';
 
 contextBridge.exposeInMainWorld('shortfab', {
   listProjects: (): Promise<ProjectSummary[]> => ipcRenderer.invoke('project:list'),
@@ -20,6 +21,15 @@ contextBridge.exposeInMainWorld('shortfab', {
   startRender: (request: RenderRequest): Promise<RenderResult> => ipcRenderer.invoke('render:start', request),
   cancelRender: (): Promise<void> => ipcRenderer.invoke('render:cancel'),
   personalToolAvailable: (): Promise<boolean> => ipcRenderer.invoke('personal:status'),
+  startAnalysis: (request: AnalyzeRequest): Promise<AnalyzeResult> => ipcRenderer.invoke('analysis:start', request),
+  cancelAnalysis: (): Promise<void> => ipcRenderer.invoke('analysis:cancel'),
+  cachedAnalysis: (videoId: string, duration: number, language: AnalyzeRequest['language']): Promise<ClipAnalysis | null> =>
+    ipcRenderer.invoke('analysis:cached', videoId, duration, language),
+  onAnalysisProgress: (callback: (progress: AnalyzeProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: AnalyzeProgress) => callback(progress);
+    ipcRenderer.on('analysis:progress', listener);
+    return () => ipcRenderer.removeListener('analysis:progress', listener);
+  },
   sttStatus: (): Promise<SttStatus> => ipcRenderer.invoke('stt:status'),
   chooseSttModel: (): Promise<SttStatus> => ipcRenderer.invoke('stt:chooseModel'),
   installSttModel: (): Promise<SttStatus> => ipcRenderer.invoke('stt:installModel'),
