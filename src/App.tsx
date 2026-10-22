@@ -73,9 +73,10 @@ function App() {
   const linked = project?.youtubeSource;
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
+  // A public YouTube clip can be fetched on demand for personal export.
   const canRender = validClip && !rendering && !busy && !publishingBusy && (
     (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
-    (sourceTab === 'youtube' && clip?.source === 'youtube' && !!linkedAsset)
+    (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
   );
   const publishReady = publishing?.artifact?.projectId === project?.id &&
     publishing?.artifact?.clipId === clip?.id &&
@@ -172,7 +173,11 @@ function App() {
       if (live) onPublished(value.job);
     });
     const unsubscribe = window.shortfab?.onProgress((value) => {
-      if (live) setProgress(value);
+      if (live) {
+        setProgress(value);
+        if (value.phase === 'download') setStatus('YouTube 영상 가져오는 중…');
+        else if (value.phase === 'render') setStatus('세로형 MP4 인코딩 중…');
+      }
     });
     if (window.shortfab) {
       void window.shortfab.partnerCatalogStatus()
@@ -458,7 +463,8 @@ function App() {
 
   async function renderClip() {
     if (!canRender || !clip || !window.shortfab) return;
-    const renderAssetId = clip.source === 'youtube' ? linkedAsset?.sourceAssetId : media?.id;
+    const renderAssetId = clip.source === 'youtube'
+      ? linkedAsset?.sourceAssetId ?? (youtubeId ? 'youtube:' + youtubeId : null) : media?.id;
     const offset = clip.source === 'youtube' ? linkedAsset?.startOffsetSeconds ?? 0 : 0;
     if (!renderAssetId) return;
     setError('');
@@ -538,14 +544,15 @@ function App() {
               <p className="hint">공식 플레이어에서 영상을 탐색하고 원하는 구간을 클립 후보로 저장하세요.</p>
               {youtubeId && <>
                 <div className="source-details" role="status">
-                  <strong>{linkedAsset ? 'READY TO RENDER · 원본 연결됨' : (linked?.state ?? 'preview_only').toUpperCase()}</strong>
+                  <strong>{linkedAsset ? '연결 원본 사용 가능' : '개인용 직접 MP4 출력 가능'}</strong>
                   <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
                   <span>{linkedAsset ? `원본: ${linkedAsset.fileName} · 오프셋 +${linkedAsset.startOffsetSeconds}초` :
-                    linked?.explanation ?? '원본 연결 전에는 탐색만 할 수 있습니다.'}</span>
-                  <span>SHA-256 및 길이 검증은 영상 내용 동일성이나 법적 사용 허가를 자동 증명하지 않습니다.</span>
+                    '공개 영상은 MP4 익스포트 때 yt-dlp로 자동 가져옵니다. 별도 원본 등록이 필요하지 않습니다.'}</span>
+                  <span>개인 이용에도 원본 권리 및 YouTube 이용약관을 확인해 주세요. 비공개·DRM·접근 제한 영상은 지원하지 않습니다.</span>
                   <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">YouTube에서 원본 보기 ↗</a>
                 </div>
-                <div className="source-binding">
+                <details className="source-binding source-advanced">
+                  <summary>고급: 권리자·파트너 원본 연결</summary>
                   <div className="source-partner">
                     <strong>파트너 원본 자동 탐색</strong>
                     <p className="hint">현재 YouTube 영상 ID를 권리자 카탈로그에서 조회합니다. 검증된 서명·사용 권한이 있는 원본만 다운로드합니다.</p>
@@ -604,7 +611,7 @@ function App() {
                     </button>
                     {cloudError && <p className="warning" role="alert">{cloudError}</p>}
                   </div>
-                </div>
+                </details>
               </>}
               {draft?.youtubeUrl && !youtubeId && <p className="warning">올바른 YouTube 링크를 입력해 주세요.</p>}
             </section>
@@ -663,7 +670,7 @@ function App() {
         </aside>
 
         <main className="preview-area">
-          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? 'YouTube 원본 구간 탐색' : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'PREVIEW ONLY' : '9:16'}</span></div>
+          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? 'YouTube 원본 구간 탐색' : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'YOUTUBE · CLIP' : '9:16'}</span></div>
           <div className="preview-stage">
             <div className="portrait">
               {sourceTab === 'youtube' && youtubeId ? (
@@ -724,14 +731,14 @@ function App() {
           <div className="export-spec"><span>해상도</span><strong>{clip ? `${clip.width} × ${clip.width * 16 / 9}` : '—'}</strong></div>
           <div className="export-spec"><span>프레임</span><strong>30 FPS</strong></div>
           <div className="export-spec"><span>클립 길이</span><strong>{formatTime(clip ? clip.end - clip.start : 0)}</strong></div>
-          {sourceTab === 'youtube' && <p className={linkedAsset ? 'hint' : 'warning'}>{linkedAsset ?
-            'YouTube 마커를 연결된 허가 원본 시각으로 변환해 내보냅니다.' :
-            'PREVIEW ONLY · 권리자 원본을 연결하기 전에는 MP4로 출력할 수 없습니다.'}</p>}
+          {sourceTab === 'youtube' && <p className="hint">{linkedAsset ?
+            '연결된 원본으로 출력합니다.' :
+            '개인용 직접 출력: MP4 익스포트를 누르면 공개 YouTube 영상을 가져와 선택 구간을 잘라냅니다. yt-dlp와 FFmpeg 설치가 필요합니다.'}</p>}
           <button className="primary full export-button" disabled={!canRender} onClick={() => void renderClip()}>
             {rendering ? '렌더링 중…' : '선택 클립 MP4 익스포트'}
           </button>
           {rendering && <button className="cancel full" onClick={() => void window.shortfab?.cancelRender()}>렌더 취소</button>}
-          <div className="progress-area"><div className="progress-head"><span>진행 상태</span><strong>{progress.percent}%</strong></div>
+          <div className="progress-area"><div className="progress-head"><span>{progress.phase === 'download' ? '영상 다운로드' : progress.phase === 'render' ? 'MP4 인코딩' : '진행 상태'}</span><strong>{progress.percent}%</strong></div>
             <div className="progress-track"><div style={{ width: `${progress.percent}%` }} /></div></div>
           <p className="status" aria-live="polite">{status}</p>
           {error && <p role="alert" className="error">{error}</p>}
