@@ -59,7 +59,10 @@ export function parseWhisperSrt(contents: string, duration: number, preset: Subt
     const timingIndex = /^\d+$/.test(lines[0]) ? 1 : 0;
     const timing = timePattern.exec(lines[timingIndex] ?? '');
     if (!timing) throw new Error('음성 인식 결과의 SRT 형식을 읽을 수 없습니다.');
-    const text = lines.slice(timingIndex + 1).join(' ').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+    const text = Array.from(lines.slice(timingIndex + 1).join(' ')).map((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : char;
+    }).join('').trim();
     if (!text) continue;
     const rawStart = subtitleTime(timing[1]);
     const rawEnd = subtitleTime(timing[2]);
