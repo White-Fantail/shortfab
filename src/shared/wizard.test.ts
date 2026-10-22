@@ -92,4 +92,16 @@ describe('AG1 wizard persistence / state contracts', () => {
     wizard.source.approved = { unsafe: Number.POSITIVE_INFINITY };
     expect(() => normalizeWizard(wizard, [clip(id1)])).toThrow();
   });
+  it('invalidates aggregate review and export when assembled clip order changes', () => {
+    let wizard = newWizard([clip(id1), clip(id2)]);
+    for (const id of [id1, id2]) for (const step of ['clips', 'review', 'export'] as const) {
+      wizard = acceptStep(wizard, id, step);
+    }
+    const before = { ...editable([clip(id1), clip(id2)]), shortClipIds: [id1, id2] };
+    const after = { ...before, shortClipIds: [id2, id1] };
+    wizard = reconcileWizard(wizard, before, after);
+    expect(stepPlan(wizard, id1, 'clips').status).toBe('needs_review');
+    expect(stepPlan(wizard, id1, 'review').status).toBe('needs_review');
+    expect(stepPlan(wizard, id2, 'export').status).toBe('needs_review');
+  });
 });
