@@ -381,3 +381,7 @@
 .wizard-focus-control > input { width:100%; accent-color:#b093ec; }
 .wizard-focus-control > small { display:block; text-align:center; font-size:10px; color:#a2a3b4; }
 @media (prefers-reduced-motion: reduce) { .style-gallery-track { scroll-behavior:auto; } .style-gallery-card { transition:none; } }
+
+.style-frame-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0; }
+.style-frame-actions button { font-size:11px; padding:9px 13px; }
+.style-frame-actions .warning { flex-basis:100%; margin:0; }
