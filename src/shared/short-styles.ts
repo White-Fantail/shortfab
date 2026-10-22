@@ -51,7 +51,7 @@ function validateSlot(input: unknown, label: string): FixedSlot {
     // Small, inline images can be safely persisted and reopened without an external file path.
     // Prevent unlimited project JSON growth and exclude SVG, remote URLs and scripts.
     if (typeof value.dataUrl !== 'string' || value.dataUrl.length > 1400000 ||
-        !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl) ||
+        (value.dataUrl !== '' && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value.dataUrl)) ||
         typeof value.scale !== 'number' || !Number.isInteger(value.scale) ||
         value.scale < 30 || value.scale > 100) {
       throw new Error(label + ': PNG/JPEG/WebP 이미지(최대 1MB)와 크기를 확인하세요.');

@@ -15,7 +15,7 @@ export interface CompositionPart {
   layout: LayoutStyle | null;
   subtitles: SubtitleTrack | null;
   narration: NarrationConfig | null;
-  style: ShortStyleSelection | null;
+  style?: ShortStyleSelection | null;
 }
 
 /** One MP4 from an ordered list of non-contiguous ranges of ONE source.

@@ -92,6 +92,7 @@ const PAINT_CANVAS = [
   'ctx.strokeStyle="#121218";ctx.lineWidth=3*s;ctx.fillStyle=slot.color;',
   'ctx.strokeText(text,c.width/2,bandY+bandH/2);ctx.fillText(text,c.width/2,bandY+bandH/2);',
   '}else{',
+  'if(!slot.dataUrl)return;',
   'const img=new Image();img.src=slot.dataUrl;await img.decode();',
   'const maxW=(c.width-50*s)*slot.scale/100;const maxH=bandH*slot.scale/100;',
   'const ratio=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight);',

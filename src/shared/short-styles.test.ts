@@ -14,7 +14,7 @@ const a=clip('a2c61b6b-65b2-4e98-9b13-d8dd8f8120f3');
 const b=clip('a2c61b6b-65b2-4e98-9b13-d8dd8f8120f4');
 describe('Unified visual style and narration', () => {
   it('chooses the frame+captions as one style but preserves actual caption text and timing', () => {
-    expect(SHORT_STYLES).toHaveLength(8);
+    expect(SHORT_STYLES).toHaveLength(11);
     const patch=selectShortStyle('reaction',a.subtitles);
     expect(patch.layout.id).toBe('focus-right');
     expect(patch.subtitles.preset).toBe('impact');
@@ -47,6 +47,23 @@ describe('Unified visual style and narration', () => {
     expect(stepPlan(state,a.id,'export').status).toBe('needs_review');
     expect(stepPlan(state,b.id,'export').status).toBe('accepted');
     expect(compositionStyleSignature(a)).not.toBe(compositionStyleSignature(edited));
+  });
+  it('keeps fixed content in the saved style, including empty image placeholders', () => {
+    const base = selectShortStyle('dual-banner', a.subtitles).style;
+    expect(base.fixed?.top?.kind).toBe('text');
+    expect(base.fixed?.bottom?.kind).toBe('text');
+    const configured = validateShortStyle({ ...base, fixed: {
+      ...base.fixed, top: { kind: 'text', text: 'TOP', color: '#ffe500', size: 60, background: false },
+      bottom: { kind: 'image', dataUrl: '', scale: 75 },
+    } });
+    expect(configured?.fixed?.top).toEqual({ kind: 'text', text: 'TOP', color: '#ffe500', size: 60, background: false });
+    expect(configured?.fixed?.bottom?.kind).toBe('image');
+    expect(compositionStyleSignature({ ...a, style: base })).not.toBe(
+      compositionStyleSignature({ ...a, style: configured }));
+    expect(() => validateShortStyle({ id: 'clean-talk', version: 1, fixed: base.fixed })).toThrow();
+    expect(() => validateShortStyle({ ...base, fixed: {
+      top: { kind: 'image', dataUrl: 'https://unsafe.example/x.png', scale: 100 },
+    } })).toThrow();
   });
   it('splits spoken script deterministically and rejects unsafe settings',()=>{
     expect(splitNarration('안녕. 다시 만나!\nGood morning.')).toEqual(['안녕.','다시 만나!','Good morning.']);
