@@ -231,3 +231,21 @@
 }
 .timeline-play:hover:not(:disabled) { background:#59477e; }
 .timeline-top { gap:12px; }
+
+/* Clip-relative caption controls: they stay in the independently scrolling left panel. */
+.caption-editor{margin:14px 0 4px;padding:12px 0;border-top:1px solid #353748;border-bottom:1px solid #353748}
+.caption-editor>summary{cursor:pointer;font-size:12px;font-weight:700;color:#d5c4fc}
+.caption-editor>.hint{margin:12px 0}
+.caption-editor select,.caption-editor textarea{width:100%;min-width:0;background:#1e202b;color:#f8f8fb;border:1px solid #424656;border-radius:7px;padding:9px;font:inherit;font-size:12px;margin:7px 0 10px}
+.caption-editor textarea{resize:vertical;line-height:1.5}
+.caption-cue{padding:10px 0;border-top:1px solid #333644}
+.caption-cue-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px}
+.caption-cue-head strong{font-size:11px;color:#dbd5e5}
+.caption-cue-head div{display:flex;gap:5px}
+.caption-cue-head button{font-size:10px;padding:5px 7px}
+.caption-cue .marker-grid input{font-size:12px}
+.portrait{position:relative}
+.subtitle-preview{position:absolute;z-index:2;pointer-events:none;bottom:11.5%;left:8%;right:8%;text-align:center;font-size:clamp(12px,1.3vw,22px);line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;font-weight:800;color:#fff;text-shadow:0 2px 3px #000,0 0 5px #000}
+.subtitle-bold{color:#ffe500;font-size:clamp(14px,1.6vw,26px);font-weight:900}
+.subtitle-minimal{font-size:clamp(11px,1.15vw,18px);font-weight:500}
+.subtitle-boxed{background:rgba(15,15,15,.8);padding:5px 6px;border-radius:3px}

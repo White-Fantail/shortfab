@@ -1,10 +1,13 @@
 import { externalToolEnv } from './tool-env.js';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { rename, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { cropFilter, type RenderProgress, type RenderRequest } from '../src/shared/contracts.js';
 import { probeMedia } from './media.js';
+import { buildAss } from './subtitles.js';
+import type { SubtitleTrack } from '../src/shared/subtitles.js';
 
 const ffmpegBin = () => process.env.SHORTFAB_FFMPEG_PATH || 'ffmpeg';
 
@@ -27,24 +30,31 @@ export class RenderTask {
     outputPath: string,
     request: RenderRequest,
     progress: (value: RenderProgress) => void,
+    subtitles: SubtitleTrack | null = null,
   ): Promise<void> {
     if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
     const temporaryPath = join(dirname(outputPath), `.shortfab-${randomUUID()}.mp4`);
     const clipSeconds = request.end - request.start;
+    let subtitleDir: string | null = null;
     const args = [
       '-hide_banner', '-nostdin', '-loglevel', 'error',
       '-ss', request.start.toFixed(3), '-i', sourcePath,
       '-t', clipSeconds.toFixed(3),
       '-map', '0:v:0', '-map', '0:a:0?',
-      '-vf', cropFilter(request.width),
+      '-vf', cropFilter(request.width) + (subtitles?.cues.length ? ',ass=captions.ass' : ''),
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
       '-movflags', '+faststart', '-progress', 'pipe:1',
       '-y', temporaryPath,
     ];
     try {
+      if (subtitles?.cues.length) {
+        // Private ASCII basename via cwd avoids filter path quoting, including Windows drives.
+        subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
+        await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
+      }
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(ffmpegBin(), args, { windowsHide: true, env: externalToolEnv() });
+        const child = spawn(ffmpegBin(), args, { windowsHide: true, env: externalToolEnv(), cwd: subtitleDir ?? undefined });
         this.child = child;
         let stderr = '';
         let stdoutBuffer = '';
@@ -92,6 +102,7 @@ export class RenderTask {
       throw error;
     } finally {
       this.child = null;
+      if (subtitleDir) await rm(subtitleDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }

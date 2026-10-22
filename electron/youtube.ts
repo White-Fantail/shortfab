@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { basename, join } from 'node:path';
 import { app, safeStorage, shell } from 'electron';
+import type { ProjectClip } from '../src/shared/projects.js';
 import {
   interpretYouTubeState, nextUploadOffset, validatePublishDraft,
   type PublishJobView, type PublishOverview, type PublishState,
@@ -37,6 +38,7 @@ interface Artifact {
   start: number;
   end: number;
   width: number;
+  subtitleSignature: string;
 }
 
 interface UploadResponse {
@@ -255,16 +257,16 @@ export class YouTubePublisher {
       artifact: this.artifact ? {
         filename: basename(this.artifact.path), projectId: this.artifact.projectId, clipId: this.artifact.clipId,
         start: this.artifact.start, end: this.artifact.end, width: this.artifact.width,
-        sourceBindingId: this.artifact.sourceBindingId,
+        sourceBindingId: this.artifact.sourceBindingId, subtitleSignature: this.artifact.subtitleSignature,
       } : null,
       jobs: vault.jobs.slice(-20).reverse().map(jobView),
     };
   }
 
-  async recordRender(path: string, projectId: string, clipId: string, start: number, end: number, width: number, sourceBindingId: string | null): Promise<void> {
+  async recordRender(path: string, projectId: string, clipId: string, start: number, end: number, width: number, sourceBindingId: string | null, subtitleSignature: string): Promise<void> {
     const info = await stat(path);
     if (!info.isFile() || info.size < 1) throw new Error('익스포트 파일이 올바르지 않습니다.');
-    this.artifact = { path, projectId, clipId, start, end, width, sourceBindingId };
+    this.artifact = { path, projectId, clipId, start, end, width, sourceBindingId, subtitleSignature };
   }
 
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
@@ -350,14 +352,15 @@ export class YouTubePublisher {
     return response;
   }
 
-  async start(metadataInput: unknown, projectId: string, selectedClip: { id: string; start: number; end: number; width: number } | null, sourceBindingId: string | null): Promise<PublishJobView> {
+  async start(metadataInput: unknown, projectId: string, selectedClip: ProjectClip | null, sourceBindingId: string | null): Promise<PublishJobView> {
     return this.exclusive(async () => {
       const metadata = validatePublishDraft(metadataInput);
       const file = this.artifact;
       if (!file || file.projectId !== projectId || !selectedClip ||
         file.clipId !== selectedClip.id || file.start !== selectedClip.start ||
         file.end !== selectedClip.end || file.width !== selectedClip.width ||
-        file.sourceBindingId !== sourceBindingId) {
+        file.sourceBindingId !== sourceBindingId ||
+        file.subtitleSignature !== JSON.stringify(selectedClip.subtitles ?? null)) {
         throw new Error('선택한 클립이 익스포트 후 수정되었습니다. MP4를 다시 익스포트해 주세요.');
       }
       const vault = await this.load();

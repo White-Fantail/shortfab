@@ -242,9 +242,10 @@ app.whenReady().then(() => {
             percent: direct ? 50 + Math.floor(progress.percent * 0.5) : progress.percent,
           });
         }
-      });
+      }, activeClip.subtitles ?? null);
       await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end,
-        activeClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null);
+        activeClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null,
+        JSON.stringify(activeClip.subtitles ?? null));
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;

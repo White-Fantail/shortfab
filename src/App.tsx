@@ -6,6 +6,7 @@ import {
   type ProjectClip, type ProjectEdits, type ProjectSummary, type ProjectView,
 } from './shared/projects';
 import type { BindSourceRequest } from './shared/sources';
+import { SUBTITLE_PRESETS, type SubtitleTrack } from './shared/subtitles';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
 type SourceTab = 'local' | 'youtube';
@@ -76,6 +77,8 @@ function App() {
   const sourceDuration = sourceTab === 'youtube' ? draft?.youtubeDuration ?? null : media?.duration ?? null;
   const draftValidationError = draft ? projectEditValidationError(draft, media?.duration ?? null) : null;
   const currentTime = Math.max(0, Math.min(scrubTime ?? playhead, sourceDuration ?? 0));
+  const activeCaption = clip?.subtitles?.cues.find((cue) =>
+    currentTime >= clip.start + cue.start && currentTime < clip.start + cue.end && cue.text.trim());
   const validClip = Boolean(clip && sourceDuration !== null &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
     clip.start >= 0 && clip.end - clip.start >= MIN_CLIP_SECONDS - CLIP_TIME_EPSILON && clip.end <= sourceDuration + 0.02);
@@ -92,6 +95,7 @@ function App() {
     publishing?.artifact?.start === clip?.start &&
     publishing?.artifact?.end === clip?.end &&
     publishing?.artifact?.width === clip?.width &&
+    publishing?.artifact?.subtitleSignature === JSON.stringify(clip?.subtitles ?? null) &&
     publishing?.artifact?.sourceBindingId === (clip?.source === 'youtube' ? linkedAsset?.sourceAssetId ?? null : null);
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
   const canPublish = publishReady &&
@@ -442,6 +446,35 @@ function App() {
     }));
   }
 
+  function updateSubtitles(edit: (value: SubtitleTrack) => SubtitleTrack) {
+    if (!clip) return;
+    updateClip({ subtitles: edit(clip.subtitles ?? { preset: 'classic', cues: [] }) });
+  }
+
+  function addCaption() {
+    if (!clip || (clip.subtitles?.cues.length ?? 0) >= 30 || clip.end - clip.start < 0.1) return;
+    const duration = clip.end - clip.start;
+    const from = Math.max(0, Math.min(duration - 0.1, currentTime - clip.start));
+    updateSubtitles((value) => ({
+      ...value, cues: [...value.cues, {
+        id: crypto.randomUUID(), start: Number(from.toFixed(2)),
+        end: Number(Math.min(duration, from + 3).toFixed(2)), text: '',
+      }],
+    }));
+  }
+
+  function updateCaption(id: string, patch: Partial<SubtitleTrack['cues'][number]>) {
+    updateSubtitles((value) => ({
+      ...value, cues: value.cues.map((cue) => cue.id === id ? { ...cue, ...patch } : cue),
+    }));
+  }
+
+  function removeCaption(id: string) {
+    updateSubtitles((value) => ({
+      ...value, cues: value.cues.filter((cue) => cue.id !== id),
+    }));
+  }
+
   function addClip() {
     if (sourceDuration === null || !draft || busy || rendering ||
       (sourceTab === 'youtube' && !youtubeId) || (sourceTab === 'local' && !sourceConnected)) return;
@@ -450,7 +483,7 @@ function App() {
     if (to - from < 0.2 || draft.clips.length >= 100) return;
     const newClip: ProjectClip = {
       source: sourceTab, id: crypto.randomUUID(), title: `클립 ${draft.clips.length + 1}`,
-      start: from, end: to, width: clip?.width ?? 720,
+      start: from, end: to, width: clip?.width ?? 720, subtitles: null,
     };
     changeDraft((current) => ({
       ...current, clips: [...current.clips, newClip], selectedClipId: newClip.id,
@@ -712,6 +745,44 @@ function App() {
               <button disabled={sourceDuration === null || busy || rendering} onClick={() => updateClip({ end: Math.max(playhead, clip.start + 0.2) })}>현재 시각 → OUT</button>
             </div>
             <div className="duration"><span>선택 구간</span><strong>{formatTime(clip.end - clip.start)}</strong></div>
+            <details className="caption-editor">
+              <summary>자막 편집 · {clip.subtitles?.cues.length ?? 0}개</summary>
+              <p className="hint">클립 IN을 0초로 하는 수동 자막입니다. 자막 구간·스타일은 클립별 자동 저장되고 MP4에 합성됩니다.</p>
+              <label htmlFor="caption-preset">자막 스타일</label>
+              <select id="caption-preset" value={clip.subtitles?.preset ?? 'classic'}
+                disabled={busy || rendering} onChange={(event) => updateSubtitles((value) => ({
+                  ...value, preset: event.target.value as SubtitleTrack['preset'],
+                }))}>
+                {SUBTITLE_PRESETS.map((preset) => <option key={preset} value={preset}>{{
+                  classic: '기본 흰색', bold: '강조 노랑', minimal: '미니멀', boxed: '배경 박스',
+                }[preset]}</option>)}
+              </select>
+              {(clip.subtitles?.cues ?? []).map((cue, index) => <div key={cue.id} className="caption-cue">
+                <div className="caption-cue-head">
+                  <strong>자막 {index + 1}</strong>
+                  <div>
+                    <button type="button" disabled={busy || rendering}
+                      onClick={() => moveTo(clip.start + cue.start)}>▶ 위치</button>
+                    <button type="button" disabled={busy || rendering}
+                      onClick={() => removeCaption(cue.id)}>삭제</button>
+                  </div>
+                </div>
+                <textarea aria-label={`자막 ${index + 1} 내용`} rows={2} maxLength={100}
+                  value={cue.text} disabled={busy || rendering}
+                  onChange={(event) => updateCaption(cue.id, { text: event.target.value })} />
+                <div className="marker-grid">
+                  <label>시작 (클립 초)<input type="number" min="0" step="0.1"
+                    disabled={busy || rendering} value={cue.start}
+                    onChange={(event) => updateCaption(cue.id, { start: Number(event.target.value) })} /></label>
+                  <label>끝 (클립 초)<input type="number" min="0" step="0.1"
+                    disabled={busy || rendering} value={cue.end}
+                    onChange={(event) => updateCaption(cue.id, { end: Number(event.target.value) })} /></label>
+                </div>
+              </div>)}
+              <button type="button" className="secondary full" disabled={busy || rendering || (clip.subtitles?.cues.length ?? 0) >= 30}
+                onClick={addCaption}>+ 현재 위치에 자막 추가</button>
+              <p className="hint">내용이 비었거나 시간이 겹치면 자동 저장·익스포트가 보류됩니다. 자동 음성 인식은 후속 개발입니다.</p>
+            </details>
             <button className="secondary full" disabled={!validClip || (sourceTab === 'local' && !sourceConnected) || busy || rendering}
               onClick={() => void playClip()}>▶ 선택 구간 재생</button>
             {sourceTab === 'youtube' && <label className="loop-option"><input type="checkbox" checked={loopClip}
@@ -753,6 +824,10 @@ function App() {
                   <small>{sourceTab === 'youtube' ? 'YouTube URL을 입력해 주세요' : project?.sourceStatus === 'missing' ? '원본을 재연결해 주세요' : '로컬 영상을 선택하세요'}</small>
                 </div>
               )}
+              {activeCaption && clip?.subtitles && <div aria-hidden="true"
+                className={`subtitle-preview subtitle-${clip.subtitles.preset}`}>
+                {activeCaption.text}
+              </div>}
             </div>
           </div>
           <div className="timeline">
@@ -810,6 +885,7 @@ function App() {
           <div className="export-spec"><span>해상도</span><strong>{clip ? `${clip.width} × ${clip.width * 16 / 9}` : '—'}</strong></div>
           <div className="export-spec"><span>프레임</span><strong>30 FPS</strong></div>
           <div className="export-spec"><span>클립 길이</span><strong>{formatTime(clip ? clip.end - clip.start : 0)}</strong></div>
+          <div className="export-spec"><span>자막</span><strong>{clip?.subtitles?.cues.length ? `${clip.subtitles.cues.length}개 · ${clip.subtitles.preset}` : "없음"}</strong></div>
           {sourceTab === 'youtube' && <p className="hint">{linkedAsset ?
             '연결된 원본으로 출력합니다.' :
             'MP4 버튼을 누르면 YouTube 공개 영상을 로컬로 가져온 뒤 선택 구간을 세로 영상으로 출력합니다.'}</p>}

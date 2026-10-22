@@ -1,5 +1,6 @@
 import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
 import type { SourceResolution, StoredMediaBinding } from './sources.js';
+import { validateSubtitleTrack, type SubtitleTrack } from './subtitles.js';
 
 export type ClipSource = 'local' | 'youtube';
 
@@ -10,6 +11,7 @@ export interface ProjectClip {
   start: number;
   end: number;
   width: OutputWidth;
+  subtitles?: SubtitleTrack | null; // Legacy project JSON has no captions.
 }
 
 export interface StoredAsset {
@@ -116,6 +118,7 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     return {
       source, id: clip.id, title: clip.title.trim(),
       start: clip.start, end: clip.end, width: clip.width,
+      subtitles: validateSubtitleTrack(clip.subtitles ?? null, clip.end - clip.start, label),
     };
   });
   if (value.selectedClipId !== null &&
