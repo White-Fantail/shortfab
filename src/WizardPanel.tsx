@@ -1,4 +1,7 @@
 import type { ProjectClip, ProjectEdits } from './shared/projects';
+import { StyleGallery } from './StyleGallery';
+import { layoutDefault, validateLayout, type LayoutStyleId } from './shared/layout-styles';
+import type { SubtitlePreset } from './shared/subtitles';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
 import type { SttLanguage, SttStatus } from './shared/stt';
@@ -98,8 +101,8 @@ export function WizardPanel(props: Props) {
     if (clip) {
       fields.clipId = clip.id;
       if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; }
-      if (step === 'layout') fields.width = clip.width;
-      if (step === 'subtitles') fields.cueCount = clip.subtitles?.cues.length ?? 0;
+      if (step === 'layout') { fields.width = clip.width; fields.style = validateLayout(clip.layout).id; fields.focus = validateLayout(clip.layout).focus; }
+      if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; }
       if (step === 'audio') fields.originalAudio = true;
       if (step === 'cta') fields.enabled = false;
       if (step === 'review') fields.manualComposition = true;
@@ -246,22 +249,39 @@ export function WizardPanel(props: Props) {
 
     {step === 'layout' && <>
       <div className="wizard-insight">
-        <strong>현재 실제 MP4 레이아웃: 9:16 중앙 크롭</strong>
-        <p>인물 추적·2인 분할·장면별 자동 배치는 AG3에서 구현됩니다. 지금 승인하면 기존 중앙 크롭 방식으로 출력합니다.</p>
+        <strong>스타일을 직접 고르세요</strong>
+        <p>같은 원본으로 만든 4개 세로 화면 시안을 넘겨보고 선택합니다. 얼굴 자동 인식·트래킹 없이 선택한 프레임 위치와 배경 구성이 실제 FFmpeg 출력에 반영됩니다.</p>
       </div>
+      <StyleGallery kind="layout" videoId={youtubeId} selected={validateLayout(clip?.layout).id}
+        disabled={!clip || disabled} onChoose={(id) => props.onClip({ layout: layoutDefault(id as LayoutStyleId) })} />
+      {clip && validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
+        <span>화면 가로 중심 · {Math.round(validateLayout(clip.layout).focus)}%</span>
+        <input type="range" min={0} max={100} step={1} disabled={disabled}
+          value={validateLayout(clip.layout).focus} onChange={(event) =>
+            props.onClip({ layout: { ...validateLayout(clip.layout), focus: Number(event.target.value) } })} />
+        <small>← 원본 왼쪽 · 원본 오른쪽 →</small>
+      </label>}
+      <p className="eyebrow">영상 해상도</p>
       <div className="wizard-choice-grid">
         {([720, 1080] as const).map((width) => <button type="button" key={width}
           className={clip?.width === width ? 'selected' : ''} disabled={!clip || disabled}
           onClick={() => props.onClip({ width })}>{width}p <small>{width === 720 ? '빠른 출력' : 'Full HD'}</small></button>)}
       </div>
-      <p className="hint">오른쪽 영상은 YouTube 원본 탐색이며, 합성된 9:16 결과가 아닙니다.</p>
+      <p className="hint">오른쪽 YouTube 플레이어는 원본 참고용입니다. 갤러리 이미지는 원본 썸네일 기반의 정적인 시안으로, 프레임 단위 렌더 미리보기는 아닙니다.</p>
     </>}
 
     {step === 'subtitles' && <>
       <div className="wizard-insight">
-        <strong>{clip?.subtitles?.cues.length ? `자막 ${clip.subtitles.cues.length}개 · ${clip.subtitles.preset}` : '현재 자막 없음'}</strong>
-        <p>기존 Whisper.cpp 전사 기능과 4종 번인 스타일을 사용할 수 있습니다. AI 추천 스타일 및 문장별 수정 화면은 AG4에서 추가됩니다.</p>
+        <strong>자막 스타일을 비교해 고르세요</strong>
+        <p>4개의 자막 스타일을 좌우로 넘겨 보고 선택하세요. 이미 인식하거나 수정한 자막 문장과 타임코드는 스타일을 바꿔도 그대로 보존합니다.</p>
       </div>
+      <StyleGallery kind="subtitle" videoId={youtubeId}
+        selected={clip?.subtitles?.preset ?? 'classic'}
+        sampleText={clip?.subtitles?.cues[0]?.text} disabled={!clip || disabled}
+        onChoose={(id) => clip && props.onClip({
+          subtitles: { preset: id as SubtitlePreset, cues: clip.subtitles?.cues ?? [] },
+        })} />
+      <p className="hint">{clip?.subtitles?.cues.length ?? 0}개 자막 · 실제 MP4에는 인식/입력된 자막만 합성합니다. 예시 문구는 출력하지 않습니다.</p>
       <button type="button" className="primary full"
         disabled={!clip || !validClip || !!validationError || disabled || sttBusy || !sttSetup?.engineAvailable || !sttSetup?.modelAvailable}
         onClick={props.onTranscribe}>{sttBusy ? '자동 자막 생성 중…' : '로컬 음성 인식으로 자막 생성'}</button>
@@ -286,8 +306,8 @@ export function WizardPanel(props: Props) {
       <dl className="wizard-summary">
         <div><dt>선택 클립</dt><dd>{clip?.title ?? '없음'}</dd></div>
         <div><dt>구간</dt><dd>{clip ? `${time(clip.start)} – ${time(clip.end)}` : '—'}</dd></div>
-        <div><dt>영상</dt><dd>{clip?.width ?? '—'}p · 9:16 중앙 크롭</dd></div>
-        <div><dt>자막</dt><dd>{clip?.subtitles?.cues.length ?? 0}개</dd></div>
+        <div><dt>영상</dt><dd>{clip?.width ?? '—'}p · {validateLayout(clip?.layout).id}</dd></div>
+        <div><dt>자막</dt><dd>{clip?.subtitles?.cues.length ?? 0}개 · {clip?.subtitles?.preset ?? 'classic'}</dd></div>
         <div><dt>음성·CTA</dt><dd>원본 음성 · CTA 없음</dd></div>
       </dl>
     </>}
@@ -309,7 +329,7 @@ export function WizardPanel(props: Props) {
     <div className="wizard-footer">
       {currentIndex > 0 && <button type="button" disabled={disabled} onClick={() => navigate(WIZARD_STEPS[currentIndex - 1])}>← 이전</button>}
       <button type="button" className="wizard-advanced" disabled={disabled} onClick={props.onAdvanced}>조금 수정 · 고급 편집</button>
-      {step !== 'export' && step !== 'clips' && <button type="button" title="이 단계의 자동 추천은 후속 개발 예정입니다." disabled>다시 생성 · 준비 중</button>}
+      {step !== 'export' && step !== 'clips' && step !== 'layout' && step !== 'subtitles' && <button type="button" title="이 단계의 자동 추천은 후속 개발 예정입니다." disabled>다시 생성 · 준비 중</button>}
       {step !== 'export' && <>
         {optional.has(step) && <button type="button" disabled={!canAccept || disabled}
           onClick={() => approve(true)}>건너뛰기</button>}
@@ -319,6 +339,6 @@ export function WizardPanel(props: Props) {
         </button>
       </>}
     </div>
-    <p className="wizard-generate-note">{step === 'clips' ? '추천은 실제 Whisper 전사와 로컬 휴리스틱으로 생성됩니다. 이미 채택·수정한 클립은 재추천해도 유지됩니다.' : '이 단계의 AI 자동 추천은 후속 개발 예정입니다. 승인한 사용자 수정값은 덮어쓰지 않습니다.'}</p>
+    <p className="wizard-generate-note">{step === 'clips' ? '추천은 실제 Whisper 전사와 로컬 휴리스틱으로 생성됩니다. 이미 채택·수정한 클립은 유지됩니다.' : step === 'layout' || step === 'subtitles' ? '고정 스타일 갤러리에서 선택한 값만 적용됩니다. 사용자 편집과 클립 데이터는 보존됩니다.' : '이 단계의 AI 자동 추천은 후속 개발 예정입니다. 승인한 사용자 수정값은 덮어쓰지 않습니다.'}</p>
   </section>;
 }
