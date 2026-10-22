@@ -9,10 +9,11 @@ const subtitles: Record<SubtitlePreset, { name: string; description: string }> =
   minimal: { name: '미니멀', description: '작고 담백한 자막' },
   boxed: { name: '박스 자막', description: '반투명 어두운 배경' },
 };
-export function StyleGallery({ kind, selected, videoId, sampleText, disabled, onChoose }: {
+export function StyleGallery({ kind, selected, videoId, frameImage, sampleText, disabled, onChoose }: {
   kind: Kind;
   selected: LayoutStyleId | SubtitlePreset;
   videoId: string | null;
+  frameImage?: string | null;
   sampleText?: string;
   disabled: boolean;
   onChoose: (id: string) => void;
@@ -22,8 +23,9 @@ export function StyleGallery({ kind, selected, videoId, sampleText, disabled, on
     ? LAYOUT_STYLES.map(item => ({ id: item.id, name: item.name, description: item.description }))
     : SUBTITLE_PRESETS.map(id => ({ id, ...subtitles[id] }));
   // The YouTube thumbnail is a visual reference, NOT a render-accurate clip frame.
-  const thumbnail = videoId && /^[\w-]{11}$/.test(videoId)
+  const fallbackThumbnail = videoId && /^[\w-]{11}$/.test(videoId)
     ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+  const thumbnail = frameImage || fallbackThumbnail;
   const scroll = (direction: number) => track.current?.scrollBy({ left: direction * 190, behavior: 'smooth' });
   return <div className="style-gallery">
     <div className="style-gallery-heading">
@@ -53,7 +55,7 @@ export function StyleGallery({ kind, selected, videoId, sampleText, disabled, on
       </button>)}
     </div>
     <p className="hint">카드를 옆으로 넘기고 탭해서 선택하세요. {kind === 'layout'
-      ? '원본 썸네일을 사용한 구도 참고 시안입니다. 인물 자동 추적이 아니라 프레임 크롭 방식입니다.'
+      ? '선택 클립의 실제 프레임을 불러오지 않았다면 원본 썸네일을 참고 시안으로 표시합니다. 인물 자동 추적은 없습니다.'
       : '자막 미리보기는 스타일 예시이며, 출력에는 실제 인식/입력된 자막이 들어갑니다.'}</p>
   </div>;
 }
