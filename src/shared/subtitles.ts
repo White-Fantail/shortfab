@@ -17,6 +17,7 @@ export interface SubtitleTrack {
   preset: SubtitlePreset;
   cues: SubtitleCue[];
   hook?: SubtitleHook | null;
+}
 
 /** This same contract protects autosave, reopening old projects and FFmpeg composition. */
 export function validateSubtitleTrack(input: unknown, duration: number, label = '자막'): SubtitleTrack | null {
@@ -46,7 +47,7 @@ export function validateSubtitleTrack(input: unknown, duration: number, label = 
       hook = { text: candidate.text, duration: candidate.duration, style: candidate.style! };
     }
   }
-    const ids = new Set<string>();
+  const ids = new Set<string>();
   const cues = track.cues.map((item, index): SubtitleCue => {
     const name = label + ' 자막 ' + (index + 1);
     if (!item || typeof item.id !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(item.id) || ids.has(item.id)) {
