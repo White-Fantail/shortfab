@@ -23,6 +23,11 @@ const time = (seconds: number) => {
 
 type Props = {
   wizard: WizardRecord;
+  frameImage: string | null;
+  frameBusy: boolean;
+  frameError: string;
+  onLoadFrame: () => void;
+  onCancelFrame: () => void;
   analysis: ClipAnalysis | null;
   analysisBusy: boolean;
   analysisProgress: AnalyzeProgress | null;
@@ -90,7 +95,7 @@ export function WizardPanel(props: Props) {
   const currentIndex = WIZARD_STEPS.indexOf(step);
   const next = WIZARD_STEPS[currentIndex + 1];
   const clips = draft.clips.filter((item) => item.source === 'youtube');
-  const disabled = busy || rendering || props.analysisBusy;
+  const disabled = busy || rendering || props.analysisBusy || props.frameBusy;
   const sourceValid = Boolean(youtubeId && sourceDuration !== null && sourceDuration > 0);
   const canAccept = step === 'source' ? sourceValid :
     Boolean(clip && validClip && !validationError);
@@ -252,7 +257,14 @@ export function WizardPanel(props: Props) {
         <strong>스타일을 직접 고르세요</strong>
         <p>같은 원본으로 만든 4개 세로 화면 시안을 넘겨보고 선택합니다. 얼굴 자동 인식·트래킹 없이 선택한 프레임 위치와 배경 구성이 실제 FFmpeg 출력에 반영됩니다.</p>
       </div>
-      <StyleGallery kind="layout" videoId={youtubeId} selected={validateLayout(clip?.layout).id}
+      <div className="style-frame-actions">
+        <button type="button" className="secondary" disabled={!clip || disabled}
+          onClick={props.onLoadFrame}>{props.frameImage ? '선택 클립 프레임 새로 가져오기' : '선택 클립의 실제 프레임으로 비교'}</button>
+        {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>프레임 불러오기 취소</button>}
+        {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
+      </div>
+      <StyleGallery kind="layout" videoId={youtubeId} frameImage={props.frameImage}
+        selected={validateLayout(clip?.layout).id}
         disabled={!clip || disabled} onChoose={(id) => props.onClip({ layout: layoutDefault(id as LayoutStyleId) })} />
       {clip && validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
         <span>화면 가로 중심 · {Math.round(validateLayout(clip.layout).focus)}%</span>
@@ -267,7 +279,7 @@ export function WizardPanel(props: Props) {
           className={clip?.width === width ? 'selected' : ''} disabled={!clip || disabled}
           onClick={() => props.onClip({ width })}>{width}p <small>{width === 720 ? '빠른 출력' : 'Full HD'}</small></button>)}
       </div>
-      <p className="hint">오른쪽 YouTube 플레이어는 원본 참고용입니다. 갤러리 이미지는 원본 썸네일 기반의 정적인 시안으로, 프레임 단위 렌더 미리보기는 아닙니다.</p>
+      <p className="hint">오른쪽 YouTube 플레이어는 원본 참고용입니다. 선택 클립 프레임을 가져오면 정확한 시점의 정지 이미지를 이용합니다. 실제 동영상 재생/자막 타이밍 프리뷰는 아닙니다.</p>
     </>}
 
     {step === 'subtitles' && <>
@@ -275,7 +287,13 @@ export function WizardPanel(props: Props) {
         <strong>자막 스타일을 비교해 고르세요</strong>
         <p>4개의 자막 스타일을 좌우로 넘겨 보고 선택하세요. 이미 인식하거나 수정한 자막 문장과 타임코드는 스타일을 바꿔도 그대로 보존합니다.</p>
       </div>
-      <StyleGallery kind="subtitle" videoId={youtubeId}
+      <div className="style-frame-actions">
+        <button type="button" className="secondary" disabled={!clip || disabled}
+          onClick={props.onLoadFrame}>{props.frameImage ? '선택 클립 프레임 새로 가져오기' : '선택 클립의 실제 프레임으로 비교'}</button>
+        {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>프레임 불러오기 취소</button>}
+        {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
+      </div>
+      <StyleGallery kind="subtitle" videoId={youtubeId} frameImage={props.frameImage}
         selected={clip?.subtitles?.preset ?? 'classic'}
         sampleText={clip?.subtitles?.cues[0]?.text} disabled={!clip || disabled}
         onChoose={(id) => clip && props.onClip({
