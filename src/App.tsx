@@ -43,6 +43,9 @@ function App() {
   const [analysisError, setAnalysisError] = useState('');
   const [selectedRecommendations, setSelectedRecommendations] = useState<string[]>([]);
   const [recommendationPreview, setRecommendationPreview] = useState<ClipRecommendation | null>(null);
+  const [frameBusy, setFrameBusy] = useState(false);
+  const [frameError, setFrameError] = useState('');
+  const [frameStill, setFrameStill] = useState<{ key: string; image: string } | null>(null);
   const [loopClip, setLoopClip] = useState(false);
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudError, setCloudError] = useState('');
@@ -88,6 +91,7 @@ function App() {
 
   const clip = draft?.clips.find((item) => item.id === draft.selectedClipId && item.source === sourceTab);
   const wizard = draft?.wizard ?? newWizard(draft?.clips ?? []);
+  const frameKey = clip ? `${clip.id}|${clip.start}|${clip.end}|${youtubeVideoId(draft?.youtubeUrl ?? '')}` : '';
   const visibleClips = draft?.clips.filter((item) => item.source === sourceTab) ?? [];
   const media = project?.media ?? null;
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
@@ -104,7 +108,7 @@ function App() {
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
   // A public YouTube clip can be fetched on demand for personal export.
-  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && !analysisBusy && (
+  const canRender = validClip && !frameBusy && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && !analysisBusy && (
     (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
     (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
   );
@@ -136,6 +140,8 @@ function App() {
     setAnalysisError('');
     setSelectedRecommendations([]);
     setRecommendationPreview(null);
+    setFrameStill(null);
+    setFrameError('');
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
     setCloudError('');
     setPartnerError('');
@@ -274,7 +280,7 @@ function App() {
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
     const old = draftRef.current;
-    if (!old || publishingBusy) return;
+    if (!old || publishingBusy || frameBusy) return;
     const candidate = update(old);
     if (candidate === old) return;
     const next = { ...candidate, wizard: reconcileWizard(candidate.wizard, old, candidate) };
@@ -312,14 +318,14 @@ function App() {
   }
 
   useEffect(() => {
-    if (!dirty || !draft || draftValidationError || busy || rendering || publishingBusy) return;
+    if (!dirty || !draft || draftValidationError || busy || rendering || publishingBusy || frameBusy) return;
     const timer = setTimeout(() => {
       void queueSave(draft, editVersion.current).catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause));
       });
     }, 650);
     return () => clearTimeout(timer);
-  }, [draft, dirty, draftValidationError, busy, rendering, publishingBusy]);
+  }, [draft, dirty, draftValidationError, busy, rendering, publishingBusy, frameBusy]);
 
   async function flushEdits() {
     if (dirtyRef.current && draftRef.current) {
@@ -787,6 +793,29 @@ function App() {
     catch { setError('미리보기를 재생할 수 없습니다. 원본 코덱을 확인하세요.'); }
   }
 
+  async function loadRealStyleFrame() {
+    if (!clip || !window.shortfab || frameBusy || analysisBusy || busy || rendering || publishingBusy) return;
+    const key = frameKey;
+    const id = clip.id;
+    const time = Math.min(clip.end - 0.08, clip.start + Math.min(2, (clip.end - clip.start) / 2));
+    setFrameBusy(true);
+    setFrameError('');
+    try {
+      await flushEdits();
+      const result = await window.shortfab.previewClipFrame({ clipId: id, time });
+      if (result.status === 'completed' && draftRef.current?.selectedClipId === id) {
+        const current = draftRef.current.clips.find(item => item.id === id);
+        if (current && key === `${current.id}|${current.start}|${current.end}|${youtubeVideoId(draftRef.current.youtubeUrl)}`) {
+          setFrameStill({ key, image: result.image });
+        }
+      }
+    } catch (cause) {
+      setFrameError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setFrameBusy(false);
+    }
+  }
+
   async function renderClip() {
     if (!canRender || !clip || !window.shortfab) return;
     const renderAssetId = clip.source === 'youtube'
@@ -831,31 +860,35 @@ function App() {
 
       <div className="project-bar">
         <label htmlFor="project-selector">프로젝트</label>
-        <select id="project-selector" value={project?.id ?? ''} disabled={busy || rendering || !project}
+        <select id="project-selector" value={project?.id ?? ''} disabled={busy || rendering || frameBusy || !project}
           onChange={(event) => void openProject(event.target.value)}>
           {!project && <option value="">불러오는 중…</option>}
           {projects.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.clipCount} clips</option>)}
         </select>
-        <button disabled={busy || rendering || !project} onClick={() => void newProject()}>+ 새 프로젝트</button>
+        <button disabled={busy || rendering || frameBusy || !project} onClick={() => void newProject()}>+ 새 프로젝트</button>
         <span className="save-indicator" aria-live="polite">{dirty
           ? (draftValidationError ? '수정 필요 · 저장 대기' : '변경 중 · 자동 저장') : '저장됨'}</span>
       </div>
 
       <div className="creation-mode">
         <button type="button" className={wizardMode ? 'active' : ''}
-          disabled={analysisBusy} onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
+          disabled={analysisBusy || frameBusy} onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
         <button type="button" className={!wizardMode ? 'active' : ''}
-          disabled={analysisBusy} onClick={() => setWizardMode(false)}>고급 편집</button>
+          disabled={analysisBusy || frameBusy} onClick={() => setWizardMode(false)}>고급 편집</button>
         <span>{wizardMode ? 'AI 추천 기능을 단계별로 추가 중 · 현재 지원 기능을 정확히 표시합니다.' : '기존 수동 타임라인 · 자막 · 게시 설정'}</span>
       </div>
 
       {wizardMode && <WizardProgress wizard={wizard} clipId={draft?.selectedClipId ?? null}
-        disabled={busy || rendering || analysisBusy} onGoTo={wizardGoTo} />}
+        disabled={busy || rendering || analysisBusy || frameBusy} onGoTo={wizardGoTo} />}
       <div className={wizardMode ? 'workspace wizard-workspace' : 'workspace'}>
         {wizardMode && draft && <WizardPanel wizard={wizard} draft={draft}
           clip={clip ?? null} youtubeId={youtubeId} sourceDuration={draft.youtubeDuration}
           validClip={validClip} validationError={draftValidationError}
           ready={canRender} busy={busy} rendering={rendering} progress={progress}
+          frameImage={frameStill?.key === frameKey ? frameStill.image : null}
+          frameBusy={frameBusy} frameError={frameError}
+          onLoadFrame={() => void loadRealStyleFrame()}
+          onCancelFrame={() => void window.shortfab?.cancelFramePreview()}
           analysis={analysis?.videoId === youtubeId && analysis.language === sttLanguage ? analysis : null}
           analysisBusy={analysisBusy} analysisProgress={analysisProgress} analysisError={analysisError}
           analysisLanguage={sttLanguage} onAnalysisLanguage={setSttLanguage}
