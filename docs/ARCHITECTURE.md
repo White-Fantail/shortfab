@@ -132,6 +132,10 @@ Deferred: cloud render workers, scheduler, multi-device sync, team access
 
 `PartnerCatalog (Electron main)` → allowlist HTTPS GET(videoId만 전송) → Ed25519 verified offer `{videoId, downloadUrl, sha256, rights, validUntil}` → `AuthorizedSources.createBinding` → `StoredMediaBinding`(main-only path) → 기존 프로젝트/FFmpeg 클립 렌더. 전송 URL의 쿼리 토큰/서명 유효기간은 로컬 JSON으로 보존하지 않으며, 사용자 제공 원본이나 임의 YouTube 공개 URL에서 스트림을 추출하지 않습니다. 파트너 공개키를 **운영자가 고정한 키**로만 받아야 하며 partner-supplied 키를 신뢰하지 않습니다. [상세](PARTNER_CATALOG.md).
 
+## 사용자 수용: YouTube URL → MP4 실제 출력 (2026-10-22)
+
+공식 IFrame에서 `videoId`/IN·OUT을 탐색한 후 개인용 로컬 다운로더와 FFmpeg가 연결되는 **실제 MP4 익스포트 성공을 사용자가 확인**했습니다. 코드/합성 테스트가 아닌 실사용 결과로 기록하되, 3개 실제 영상·오디오 싱크/QC·파일 재열기/재생 전체·OS 설치 패키징 검증과 구분합니다. YF-1/2의 라이선스 검증·파트너 API는 이 성공의 필수조건이 아니었으며 별도의 고급 경로로 남습니다. 자동 업로드/재게시 권한은 얻지 않습니다. [현황](IMPLEMENTATION_STATUS.md).
+
 ## 개인용 URL 직접 인코딩 경계 (2026-10-22)
 
 `YouTubeVideoId` (검증된 11자리) → `electron/personal.ts::PersonalVideoTask.acquire` → 설치된 `yt-dlp`를 shell 없이 인수 배열로 실행 → `app.getPath('userData')/sources/personal/{videoId}.mp4`에 공개 원본 캐시 → `probeMedia` 파일/영상 길이 검증 → 기존 `RenderTask`를 원본 IN/OUT/해상도로 실행 → 결과 MP4 기록. 기존 승인 원본 경로는 `AuthorizedSources`와 YF-1 바인딩을 사용하므로 별개입니다. 개인 URL 다운로드 결과는 `sourceBindingId: youtube:{videoId}`로 기록해 승인된 사용권과 오인하지 않도록 하며, 자동 게시 권한을 부여하지 않습니다. [개인용 클립 흐름](PERSONAL_YOUTUBE_EXPORT.md), [ADR-0003](adr/0003-personal-youtube-clipping.md).
