@@ -25,11 +25,11 @@ describe('AG4 transcript editing and style contract', () => {
     expect(hasTranscriptForClip(source, 10, 17)).toBe(true);
     const track = captionsFromAnalysis(source, 10, 17, 'cinema');
     expect(track.preset).toBe('cinema');
-    expect(track.cues).toHaveLength(1);
+    expect(track.cues).toHaveLength(2);
     expect(track.cues[0].start).toBeCloseTo(0.2);
-    expect(track.cues[0].end).toBeCloseTo(5.1);
+    expect(track.cues[1].end).toBeCloseTo(5.1);
     expect(track.cues[0].text).toContain('왜 이런 일이');
-    expect(track.cues[0].text).not.toContain('구간 밖');
+    expect(track.cues.map(x => x.text).join(' ')).not.toContain('구간 밖');
   });
   it('creates opt-in real-caption Hook and a subset of highlighted lines', () => {
     const track = { preset: 'neon' as const, cues: [
