@@ -52,8 +52,8 @@ describe('FFmpeg PNG overlay composition without libass', () => {
       ], { timeout: 15_000, encoding: 'utf8' });
       expect(source.status, source.stderr).toBe(0);
       await writeFile(join(dir, 'captions.ffconcat'),
-        "ffconcat version 1.0\\nfile 'caption-0.png'\\nduration 1.0\\nfile 'caption-0.png'\\n"
-          .replaceAll('\\\\n', '\\n'));
+        ['ffconcat version 1.0', "file 'caption-0.png'", 'duration 1.0',
+          "file 'caption-0.png'"].join("\n") + "\n");
       const output = join(dir, 'out.mp4');
       const render = spawnSync('ffmpeg', [
         '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
