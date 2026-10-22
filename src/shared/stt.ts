@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { validateSubtitleTrack, type SubtitleCue, type SubtitleTrack } from './subtitles.js';
 
 export type SttLanguage = 'auto' | 'ko' | 'en';
@@ -78,7 +77,7 @@ export function parseWhisperSrt(contents: string, duration: number, preset: Subt
       const cueStart = Math.max(priorEnd, start + step * i);
       const cueEnd = Math.min(duration, start + step * (i + 1));
       if (cueEnd - cueStart < 0.1 - 1e-6) continue;
-      cues.push({ id: randomUUID(), start: Number(cueStart.toFixed(3)), end: Number(cueEnd.toFixed(3)),
+      cues.push({ id: crypto.randomUUID(), start: Number(cueStart.toFixed(3)), end: Number(cueEnd.toFixed(3)),
         text: parts[i] });
       if (cues.length > 30) throw new Error('자동 인식된 자막이 30개를 초과했습니다. 구간을 더 짧게 선택해 주세요.');
     }
