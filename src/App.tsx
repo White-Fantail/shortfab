@@ -40,6 +40,8 @@ function App() {
   });
   const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const isScrubbing = useRef(false);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
   const [personalToolReady, setPersonalToolReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
@@ -68,6 +70,7 @@ function App() {
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
   const sourceConnected = project?.sourceStatus === 'connected';
   const sourceDuration = sourceTab === 'youtube' ? draft?.youtubeDuration ?? null : media?.duration ?? null;
+  const currentTime = Math.max(0, Math.min(scrubTime ?? playhead, sourceDuration ?? 0));
   const validClip = Boolean(clip && sourceDuration !== null &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
     clip.start >= 0 && clip.end >= clip.start + 0.2 && clip.end <= sourceDuration + 0.02);
@@ -119,6 +122,8 @@ function App() {
     setDirty(false);
     setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.media ? 'local' : 'youtube'));
     setLoopClip(false);
+    isScrubbing.current = false;
+    setScrubTime(null);
     setPlayhead(view.clips.find((c) => c.id === view.selectedClipId)?.start ?? 0);
     setProgress({ percent: 0, seconds: 0 });
     setStatus(`프로젝트: ${view.title} · ${view.clips.length}개 클립`);
@@ -371,6 +376,8 @@ function App() {
   }
 
   function selectSource(next: SourceTab) {
+    isScrubbing.current = false;
+    setScrubTime(null);
     setSourceTab(next);
     setPlayhead(0);
     changeDraft((current) => {
@@ -380,6 +387,8 @@ function App() {
   }
 
   function setYoutubeUrl(value: string) {
+    isScrubbing.current = false;
+    setScrubTime(null);
     setCloudUrl('');
     setCloudError('');
     setPartnerError('');
@@ -448,12 +457,32 @@ function App() {
     });
   }
 
+  function onPlaybackTime(time: number) {
+    // A playing video keeps reporting its old position while the user drags.
+    // Only the user's thumb position should control the timeline until release.
+    if (!isScrubbing.current && Number.isFinite(time)) setPlayhead(time);
+  }
+
   function moveTo(time: number) {
     if (sourceDuration === null) return;
     const clamped = Math.min(sourceDuration, Math.max(0, time));
     setPlayhead(clamped);
     if (sourceTab === 'youtube') youtubePlayer.current?.seek(clamped);
     else if (videoRef.current) videoRef.current.currentTime = clamped;
+  }
+
+  function updateScrub(time: number) {
+    if (sourceDuration === null) return;
+    const clamped = Math.min(sourceDuration, Math.max(0, time));
+    if (isScrubbing.current) setScrubTime(clamped);
+    else moveTo(clamped); // Keyboard and accessibility controls commit directly.
+  }
+
+  function finishScrub(time: number) {
+    if (!isScrubbing.current) return;
+    isScrubbing.current = false;
+    setScrubTime(null);
+    moveTo(time); // One seek on pointer release, not on every drag frame.
   }
 
   async function playClip() {
@@ -552,14 +581,17 @@ function App() {
                 placeholder="https://youtu.be/…" />
               <p className="hint">공식 플레이어에서 영상을 탐색하고 원하는 구간을 클립 후보로 저장하세요.</p>
               {youtubeId && <>
-                <div className="source-details" role="status">
-                  <strong>{linkedAsset ? '연결 원본 사용 가능' : '개인용 직접 MP4 출력 가능'}</strong>
-                  <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
-                  <span>{linkedAsset ? `원본: ${linkedAsset.fileName} · 오프셋 +${linkedAsset.startOffsetSeconds}초` :
-                    '공개 영상은 MP4 익스포트 때 yt-dlp로 자동 가져옵니다. 별도 원본 등록이 필요하지 않습니다.'}</span>
-                  <span>개인 이용에도 원본 권리 및 YouTube 이용약관을 확인해 주세요. 비공개·DRM·접근 제한 영상은 지원하지 않습니다.</span>
-                  <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">YouTube에서 원본 보기 ↗</a>
-                </div>
+                <details className="source-info">
+                  <summary>원본 정보 · 이용 안내</summary>
+                  <div className="source-info-body">
+                    <strong>{linkedAsset ? '연결된 원본' : '개인용 직접 MP4 출력'}</strong>
+                    <span>{draft?.youtubeDuration ? `영상 길이 ${formatTime(draft.youtubeDuration)}` : '영상 메타데이터 로딩 중'}</span>
+                    <span>{linkedAsset ? `원본: ${linkedAsset.fileName} · 오프셋 +${linkedAsset.startOffsetSeconds}초` :
+                      'MP4 익스포트 시 공개 영상을 가져옵니다. 별도 원본 등록은 필요하지 않습니다.'}</span>
+                    <span>개인 이용에도 원본 권리 및 YouTube 이용약관을 확인해 주세요. 접근 제한·DRM 영상은 지원하지 않습니다.</span>
+                    <a href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">YouTube에서 원본 보기 ↗</a>
+                  </div>
+                </details>
                 <details className="source-binding source-advanced">
                   <summary>고급: 권리자·파트너 원본 연결</summary>
                   <div className="source-partner">
@@ -685,13 +717,13 @@ function App() {
               {sourceTab === 'youtube' && youtubeId ? (
                 <YouTubePreview key={youtubeId} ref={youtubePlayer} videoId={youtubeId}
                   start={clip?.start ?? null} end={clip?.end ?? null} loop={loopClip}
-                  onTime={setPlayhead} onDuration={onYoutubeDuration} />
+                  onTime={onPlaybackTime} onDuration={onYoutubeDuration} />
               ) : media && sourceTab === 'local' && sourceConnected ? (
                 <video key={`${project?.id}-${media.id}-${media.previewUrl}`} ref={videoRef}
                   src={media.previewUrl} controls playsInline preload="metadata"
                   onTimeUpdate={(event) => {
                     const current = event.currentTarget;
-                    setPlayhead(current.currentTime);
+                    onPlaybackTime(current.currentTime);
                     if (!current.paused && clip && current.currentTime >= clip.end) current.pause();
                   }} />
               ) : (
@@ -703,10 +735,22 @@ function App() {
             </div>
           </div>
           <div className="timeline">
-            <div className="timeline-top"><span>원본 타임라인</span><span>{sourceDuration === null ? '--:--' : formatTime(sourceDuration)}</span></div>
-            <input aria-label="영상 위치" type="range" min="0" max={Math.max(sourceDuration ?? 30, 0.2)} step="0.1"
-              disabled={sourceDuration === null || (sourceTab === 'local' && !sourceConnected)} value={Math.min(playhead, sourceDuration ?? 30)}
-              onChange={(event) => moveTo(Number(event.target.value))} />
+            <div className="timeline-top">
+              <span>현재 재생 위치</span>
+              <strong className="timeline-clock">
+                <span className="timeline-current">{formatTime(currentTime)}</span>
+                <span className="timeline-clock-separator"> / </span>
+                <span>{sourceDuration === null ? '--:--' : formatTime(sourceDuration)}</span>
+              </strong>
+            </div>
+            <input aria-label="영상 재생 위치" type="range" min="0" max={Math.max(sourceDuration ?? 30, 0.2)} step="0.1"
+              disabled={sourceDuration === null || (sourceTab === 'local' && !sourceConnected)} value={currentTime}
+              onPointerDown={() => { isScrubbing.current = true; setScrubTime(currentTime); }}
+              onPointerUp={(event) => finishScrub(Number(event.currentTarget.value))}
+              onPointerCancel={(event) => finishScrub(Number(event.currentTarget.value))}
+              onLostPointerCapture={(event) => finishScrub(Number(event.currentTarget.value))}
+              onBlur={(event) => finishScrub(Number(event.currentTarget.value))}
+              onChange={(event) => updateScrub(Number(event.currentTarget.value))} />
             <div className="timeline-markers">
               <span>IN {formatTime(clip?.start ?? 0)}</span><span>OUT {formatTime(clip?.end ?? 0)}</span>
             </div>
