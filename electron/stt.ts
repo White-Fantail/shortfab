@@ -67,6 +67,45 @@ export class SttTask {
     this.child = null;
   }
 
+  /**
+   * Transcribe one <= 9-minute source slice for AG2, retaining every speech
+   * segment (the subtitle editor's 30-cue limit must not truncate analysis).
+   */
+  async transcribeSlice(input: Omit<TranscriptionInput, 'preset'>,
+    onPhase: (phase: SttPhase) => void): Promise<string> {
+    const seconds = input.end - input.start;
+    if (!Number.isFinite(input.start) || !Number.isFinite(input.end) ||
+        input.start < 0 || seconds < 0.2 || seconds > MAX_STT_SECONDS ||
+        !['auto', 'ko', 'en'].includes(input.language)) {
+      throw new Error('영상 분석 구간이 올바르지 않습니다.');
+    }
+    const model = await stat(input.modelPath).catch(() => null);
+    if (!model?.isFile() || model.size < 1_000_000) throw new Error('Whisper 모델 파일을 찾을 수 없습니다.');
+    const directory = await mkdtemp(join(tmpdir(), 'shortfab-analysis-'));
+    const wav = join(directory, 'source.wav');
+    const prefix = join(directory, 'speech');
+    try {
+      onPhase('extract');
+      await this.execute(this.binaries.ffmpeg, [
+        '-hide_banner', '-nostdin', '-loglevel', 'error',
+        '-ss', input.start.toFixed(3), '-i', input.sourcePath,
+        '-t', seconds.toFixed(3), '-map', '0:a:0', '-vn',
+        '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-y', wav,
+      ], 'extract');
+      onPhase('transcribe');
+      await this.execute(this.binaries.whisper, [
+        '-m', input.modelPath, '-f', wav, '-l', input.language,
+        '-osrt', '-of', prefix, '-np',
+      ], 'transcribe');
+      const file = await stat(prefix + '.srt');
+      if (!file.isFile() || file.size > 2 * 1024 * 1024) throw new Error('영상 음성 분석 파일이 올바르지 않습니다.');
+      return await readFile(prefix + '.srt', 'utf8');
+    } finally {
+      this.child = null;
+      await rm(directory, { force: true, recursive: true }).catch(() => {});
+    }
+  }
+
   async run(input: TranscriptionInput, onPhase: (phase: SttPhase) => void): Promise<SubtitleTrack> {
     const clipSeconds = input.end - input.start;
     if (!Number.isFinite(input.start) || !Number.isFinite(input.end) || input.start < 0 ||
