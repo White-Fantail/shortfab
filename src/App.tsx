@@ -524,8 +524,20 @@ function App() {
     setRecommendationPreview(null);
     changeDraft((current) => ({
       ...current,
-      clips: current.clips.map((candidate) =>
-        candidate.id === current.selectedClipId ? { ...candidate, ...patch } : candidate),
+      clips: current.clips.map((candidate) => {
+        if (candidate.id === current.selectedClipId) return { ...candidate, ...patch };
+        if (wizardMode && current.shortClipIds.includes(candidate.id) && patch.style) {
+          // A style card changes the montage's visual language, not another
+          // segment's own transcript/cue timings.
+          return { ...candidate, style: patch.style, layout: patch.layout ?? candidate.layout,
+            subtitles: candidate.subtitles ? { ...candidate.subtitles,
+              preset: patch.subtitles?.preset ?? candidate.subtitles.preset } : null };
+        }
+        if (wizardMode && current.shortClipIds.includes(candidate.id) && patch.width) {
+          return { ...candidate, width: patch.width };
+        }
+        return candidate;
+      }),
     }));
   }
 
