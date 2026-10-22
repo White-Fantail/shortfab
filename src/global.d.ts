@@ -19,6 +19,7 @@ declare global {
       bindPartnerSource(): Promise<ProjectView>;
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
+      personalToolAvailable(): Promise<boolean>;
       onProgress(callback: (progress: RenderProgress) => void): () => void;
       publishOverview(): Promise<PublishOverview>;
       connectYouTube(): Promise<PublishOverview>;
