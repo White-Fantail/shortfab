@@ -116,3 +116,10 @@ Clip 추천 후보는 프로젝트에 추가할 때에만 `ProjectClip`으로 �
 `RenderTask`는 저장된 `LayoutStyle`로 동일한 `layoutFilter`를 적용한다. 크롭은 `scale/crop/setsar/fps`, 원본 전체 보기는 `split + blur background + contain foreground + overlay` 복합 FFmpeg 필터 그래프로 렌더한다. ASS 자막은 단일/복합 필터 경로에 모두 합성된다. 선택한 layout의 시그니처를 artifact에 기록하여 `YouTubePublisher.start` privileged 검증에서 스타일 변경 후 오래된 MP4 게시를 막는다. AG4 자막은 별도 기본 4종 ASS 스타일을 동일 Gallery로 선택한다.
 
 **향후 확장:** 스타일 ID + 버전 + 렌더 실행 선언/검증 + 예제 + 회귀 픽스처 + 호환성 정책을 가진 정식 remote style catalog, 실제 짧은 proxy MP4 프리뷰, Trend Studio 원격 업데이트/롤백. 현재 고정 스타일 4종과 정적 카드만 실제 구현이다.
+
+
+## AG4 자막 스키마/안전한 ASS 합성 (2026-10-22)
+
+`SubtitleTrack`에 기존 4종과 신규 4종의 총 8개 고정 프리셋, optional `hook`(text, duration, style)와 각 Cue의 optional `emphasis`를 추가. 구 JSON의 필드가 없으면 동일하게 처리한다. AG2 `ClipAnalysis.segments`→`captionsFromAnalysis()`는 실제 전사 문장·시간만 재매핑하고 30큐를 초과하면 실패하여 손실을 숨기지 않는다. `suggestSubtitleDecorations()`는 실제 발화 텍스트에서 Hook 및 강조 후보를 계산하지만 사용자 적용 전 편집 데이터를 바꾸지 않는다.
+
+FFmpeg가 사용하는 `buildAss`는 고정 Styles 8개 + Emphasis/HookBanner/HookSimple를 생성하고 regular cue는 Layer 0/Hook은 상단 Layer 1으로 구성한다. 불신 텍스트의 ASS escape·길이·타임코드를 검증하며 Hook만 존재해도 ASS 필터 합성을 수행한다. Subtitle JSON의 직렬화 시그니처가 변경되면 과거 MP4의 게시를 차단한다. [AG4 문서](AG4_CAPTIONS.md).
