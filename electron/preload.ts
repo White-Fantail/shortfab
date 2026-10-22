@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('shortfab', {
   bindCloudSource: (request: ApprovedCloudSourceRequest): Promise<ProjectView> => ipcRenderer.invoke('project:bindCloud', request),
   partnerCatalogStatus: (): Promise<{ configured: boolean }> => ipcRenderer.invoke('partner:status'),
   bindPartnerSource: (): Promise<ProjectView> => ipcRenderer.invoke('project:bindPartner'),
+  previewClipFrame: (request: { clipId: string; time: number }): Promise<{ status: 'completed'; image: string } | { status: 'cancelled' }> => ipcRenderer.invoke('preview:frame', request),
+  cancelFramePreview: (): Promise<void> => ipcRenderer.invoke('preview:cancel'),
   startRender: (request: RenderRequest): Promise<RenderResult> => ipcRenderer.invoke('render:start', request),
   cancelRender: (): Promise<void> => ipcRenderer.invoke('render:cancel'),
   personalToolAvailable: (): Promise<boolean> => ipcRenderer.invoke('personal:status'),
