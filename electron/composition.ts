@@ -71,7 +71,8 @@ export class CompositionTask {
         const finish = (error?: Error) => {
           if (settled) return;
           settled = true;
-          error ? reject(error) : resolve();
+          if (error) reject(error);
+          else resolve();
         };
         child.stdout.resume();
         child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString('utf8')).slice(-8000); });
