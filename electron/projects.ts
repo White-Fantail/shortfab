@@ -57,6 +57,11 @@ export class ProjectStore {
     return this.active?.clips.find((clip) => clip.id === this.active?.selectedClipId) ?? null;
   }
 
+  get activeShortClips(): ProjectClip[] {
+    return (this.active?.shortClipIds ?? []).map((id) =>
+      this.active?.clips.find((clip) => clip.id === id)).filter((item): item is ProjectClip => !!item);
+  }
+
   get activeSource(): { id: string; path: string; info: MediaInfo } | null {
     const asset = this.active?.asset;
     if (!asset || !this.connectedPath) return null;
@@ -84,8 +89,7 @@ export class ProjectStore {
 
   get youtubeBinding(): StoredMediaBinding | null { return this.active?.youtubeBinding ?? null; }
 
-  async renderableYouTubeSource(): Promise<{ id: string; path: string; duration: number; offset: number }> {
-    const clip = this.activeClip;
+  async renderableYouTubeSource(clip: ProjectClip | null = this.activeClip): Promise<{ id: string; path: string; duration: number; offset: number }> {
     const binding = this.active?.youtubeBinding;
     if (!clip || clip.source !== 'youtube' || !binding ||
       !youtubeVideoId(this.active!.youtubeUrl) || binding.referenceVideoId !== youtubeVideoId(this.active!.youtubeUrl)) {
@@ -174,7 +178,7 @@ export class ProjectStore {
       schemaVersion: 1, id: randomUUID(), title: '새 프로젝트',
       createdAt: now, updatedAt: now, revision: 0,
       asset: null, youtubeUrl: '', youtubeDuration: null, youtubeBinding: null,
-      clips: [], selectedClipId: null,
+      clips: [], shortClipIds: [], selectedClipId: null,
     };
     await this.write(record);
     this.active = record;
@@ -337,6 +341,9 @@ export class ProjectStore {
         ...this.active.clips.filter((clip) => clip.source === 'youtube'),
         ...(probed.duration >= 0.2 ? [initialClip] : []),
       ],
+      shortClipIds: reconnect ? this.active.shortClipIds :
+        probed.duration >= 0.2 ? [initialClip.id] :
+          this.active.shortClipIds.filter((id) => this.active!.clips.some((item) => item.id === id && item.source === 'youtube')),
       selectedClipId: reconnect ? this.active.selectedClipId :
         probed.duration >= 0.2 ? initialClip.id : this.active.clips.find((clip) => clip.source === 'youtube')?.id ?? null,
       updatedAt: new Date().toISOString(), revision: this.active.revision + 1,
