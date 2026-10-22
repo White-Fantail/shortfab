@@ -27,7 +27,7 @@
 - `src/App.tsx`: 기본 Wizard와 숨겨진 Advanced Edit가 **동일 클립/상태/저장 경로**를 사용하며, 기존 IFrame 탐색/FFmpeg 출력/고급 게시 폼은 계속 접근 가능. 실제 플레이어는 YouTube **원본 참고**, 합성 프리뷰가 아님.
 - `src/shared/wizard.ts` 및 `src/shared/projects.ts`: 프로젝트 스키마 v1을 유지한 선택형 `wizard` 저장 필드, 구 JSON 파일 기본 상태 마이그레이션, clipId별 독립된 상태, proposed vs approved 분리, 사용자 필드 잠금·제안 버전·needs_review 의존 무효화. 앱 중단된 generating 상태는 재열 때 failed로 취급하며 다시 실행 대기.
 - `src/shared/wizard.test.ts`: 이전 JSON/클립 상태 격리, 제안 버전, 잠금 유지, 변경 전파, 삭제 클립 정리, 실행 중 단절 및 잘못된 스키마 거부 검사.
-- **한계:** AG2 자동 전사/클립 추천은 실제 로컬 엔진으로 연결됐지만 AI 레이아웃 재생성은 비활성화. 기존 로컬 Whisper는 자막 단계에서 호출할 수 있으나 고급 편집의 전체 교정 UI가 필요. TTS/BGM/CTA 실제 합성은 여전히 없음.
+- **한계:** AG2 자동 전사/클립 추천은 실제 로컬 엔진으로 연결됐지만 AI 자동 인물 배치는 사용자 선택형 스타일 카드로 대체했다. 기존 로컬 Whisper 전사와 AG2 전사 재사용은 Wizard 내 자막 교정 UI와 연결됐다. TTS/BGM/CTA 실제 합성은 여전히 없음.
 - **수용 미완료:** macOS/Windows에서 8단계 승인·되돌리기·재열기·고급 편집 왕복 및 MP4 사용자 시나리오 확인. 실제 YouTube 영상 접근 및 실제 한국어·영어 GGML 모델 추천 품질 수용은 미실시. 단위/빌드 CI 통과는 실제 소스 수용 증명이 아님.
 
 ## AG2 원본 분석/클립 추천 (2026-10-22 · 코드 상태)
@@ -43,7 +43,7 @@
 
 **새 제품 결정:** 자동 얼굴·인물 배치를 전제로 한 AG3에서 **프리셋 레이아웃/자막 스타일 카드 선택**으로 전환. 같은 장면을 여러 카드로 넘겨 보고 사용자가 선택한 스타일을 렌더/프로젝트에 확정한다. AG1/AG2는 아직 실기 수용 전 상태로 유지한다.
 
-- `src/StyleGallery.tsx`, `src/WizardPanel.tsx`, `src/styles.css`: 03 화면 4종 레이아웃(중앙·왼쪽·오른쪽 크롭, 흐린 배경 원본 전체)·04 자막 기본 4종을 가로 스와이프 카드·이전/다음 버튼으로 선택. 선택한 레이아웃의 가로 초점을 수동 0~100% 변경.
+- `src/StyleGallery.tsx`, `src/WizardPanel.tsx`, `src/styles.css`: 03 화면 4종 레이아웃(중앙·왼쪽·오른쪽 크롭, 흐린 배경 원본 전체)·04 자막 기본 8종을 가로 스와이프 카드·이전/다음 버튼으로 선택. 선택한 레이아웃의 가로 초점을 수동 0~100% 변경.
 - `electron/frame.ts` 및 main/preload IPC: 사용자가 명시적으로 프레임 가져오기를 누르면 클립 선택 시점의 실제 프레임을 로컬 FFmpeg에서 제한된 JPEG로 생성. 원본 다운/캐시 활용, 취소 및 실패 표시. 불가할 때 YouTube 썸네일 참고. **정지 이미지 기반이므로 움직이는 최종 인코딩 프리뷰와 완전 일치한다는 주장은 하지 않음**.
 - `src/shared/layout-styles.ts` + ProjectClip.layout: 설정 검증, 구 프로젝트 기본 중앙 크롭 변환, 클립별 독립 저장. RenderTask FFmpeg 크롭/블러 합성, 자막·오디오 유지. 변경 후 Wizard needs_review 및 `YouTubePublisher` 서버 측 오래된 렌더 업로드 거절.
 - **자동 검증:** `src/shared/layout-styles.test.ts` 및 `electron/layout-render.test.ts`에서 타입·범위·기존 JSON·무효화·FFmpeg 합성/실제 프레임 추출 회귀. **실기 대기:** 사용자가 아직 AG1/AG2 화면도 확인하지 못했으므로 AG3 포함 한 번에 실기 확인 필요.
