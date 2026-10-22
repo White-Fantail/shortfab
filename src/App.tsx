@@ -993,29 +993,32 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">S/</span><div><strong>ShortFab</strong><small>숏컷공장 · YouTube-first</small></div></div>
-        <span className="stage-label">LOCAL FIRST · EXPORT + YOUTUBE</span>
+        <div className="brand"><span className="brand-mark">S/</span>
+          <div><strong>ShortFab</strong><small>숏컷공장 · YouTube-first</small></div></div>
+        <div className="topbar-controls">
+          <label className="visually-hidden" htmlFor="project-selector">프로젝트</label>
+          <select id="project-selector" title="프로젝트 선택" aria-label="프로젝트 선택"
+            value={project?.id ?? ''} disabled={busy || rendering || frameBusy || !project}
+            onChange={(event) => void openProject(event.target.value)}>
+            {!project && <option value="">불러오는 중…</option>}
+            {projects.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.clipCount} clips</option>)}
+          </select>
+          <button className="topbar-new-project" title="새 프로젝트" disabled={busy || rendering || frameBusy || !project}
+            onClick={() => void newProject()}>+ 새 프로젝트</button>
+          <label className="visually-hidden" htmlFor="creation-mode-select">작업 모드</label>
+          <select id="creation-mode-select" title="작업 모드" aria-label="작업 모드"
+            value={wizardMode ? 'wizard' : 'advanced'} disabled={analysisBusy || frameBusy}
+            onChange={(event) => {
+              const guided = event.target.value === 'wizard';
+              setWizardMode(guided);
+              if (guided) setSourceTab('youtube');
+            }}>
+            <option value="wizard">단계별 제작</option><option value="advanced">고급 편집</option>
+          </select>
+          <span className="save-indicator" aria-live="polite">{dirty
+            ? (draftValidationError ? '수정 필요' : '저장 중') : '✓ 저장됨'}</span>
+        </div>
       </header>
-
-      <div className="project-bar">
-        <label htmlFor="project-selector">프로젝트</label>
-        <select id="project-selector" value={project?.id ?? ''} disabled={busy || rendering || frameBusy || !project}
-          onChange={(event) => void openProject(event.target.value)}>
-          {!project && <option value="">불러오는 중…</option>}
-          {projects.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.clipCount} clips</option>)}
-        </select>
-        <button disabled={busy || rendering || frameBusy || !project} onClick={() => void newProject()}>+ 새 프로젝트</button>
-        <span className="save-indicator" aria-live="polite">{dirty
-          ? (draftValidationError ? '수정 필요 · 저장 대기' : '변경 중 · 자동 저장') : '저장됨'}</span>
-      </div>
-
-      <div className="creation-mode">
-        <button type="button" className={wizardMode ? 'active' : ''}
-          disabled={analysisBusy || frameBusy} onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
-        <button type="button" className={!wizardMode ? 'active' : ''}
-          disabled={analysisBusy || frameBusy} onClick={() => setWizardMode(false)}>고급 편집</button>
-        <span>{wizardMode ? 'AI 추천 기능을 단계별로 추가 중 · 현재 지원 기능을 정확히 표시합니다.' : '기존 수동 타임라인 · 자막 · 게시 설정'}</span>
-      </div>
 
       {wizardMode && <WizardProgress wizard={wizard} clipId={draft?.selectedClipId ?? null}
         disabled={busy || rendering || analysisBusy || frameBusy} onGoTo={wizardGoTo} />}
@@ -1038,6 +1041,12 @@ function App() {
             ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id])}
           onPreviewRecommendation={previewRecommendation} onAddRecommendations={addRecommendations}
           onComposition={editShortComposition}
+          onPlayClip={(id, start) => {
+            setRecommendationPreview(null);
+            changeDraft((current) => ({ ...current, selectedClipId: id }));
+            moveTo(start);
+            youtubePlayer.current?.play();
+          }}
           sttSetup={sttSetup} sttBusy={sttBusy}
           modelInstalling={modelInstalling} modelProgress={modelProgress}
           modelStartedAt={modelStartedAt} modelLastByteAt={modelLastByteAt}
