@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ProjectClip, ProjectEdits } from './shared/projects';
 import { StyleGallery } from './StyleGallery';
 import { validateLayout } from './shared/layout-styles';
@@ -65,6 +66,7 @@ type Props = {
   error: string;
   onUrl: (value: string) => void;
   onAddClip: () => void;
+  onComposition: (id: string, action: 'toggle' | 'up' | 'down') => void;
   onSelectClip: (id: string, start: number) => void;
   onClip: (patch: Partial<ProjectClip>) => void;
   onGoTo: (step: WizardStep) => void;
@@ -108,6 +110,7 @@ export function WizardProgress({ wizard, clipId, onGoTo, disabled }: {
 }
 
 export function WizardPanel(props: Props) {
+  const [clipView, setClipView] = useState<'suggestions' | 'sequence' | 'detail'>('suggestions');
   const { wizard, clip, draft, sourceDuration, youtubeId, validClip, validationError,
     ready, busy, rendering, progress, sttSetup, sttBusy, status, error } = props;
   const step = wizard.activeStep;
@@ -115,21 +118,23 @@ export function WizardPanel(props: Props) {
   const currentIndex = WIZARD_STEPS.indexOf(step);
   const next = WIZARD_STEPS[currentIndex + 1];
   const clips = draft.clips.filter((item) => item.source === 'youtube');
+  const sequenceParts = draft.shortClipIds.map((id) => draft.clips.find((item) => item.id === id)).filter((item): item is ProjectClip => !!item);
+  const sequenceSeconds = sequenceParts.reduce((total, item) => total + item.end - item.start, 0);
   const disabled = busy || rendering || props.analysisBusy || props.frameBusy;
   const sourceValid = Boolean(youtubeId && sourceDuration !== null && sourceDuration > 0);
   const transcriptRows = clip && props.analysis ? props.analysis.segments.filter((segment) =>
     segment.end >= clip.start - 0.1 && segment.start <= clip.end + 0.1
   ).slice(0, 24) : [];
   const repeatedSpeech = repeatedSpeechWarnings(transcriptRows);
-  const canAccept = step === 'source' ? sourceValid :
-    Boolean(clip && validClip && !validationError);
+  const canAccept = step === 'source' ? sourceValid : step === 'clips' ?
+    Boolean(sequenceParts.length && !validationError) : Boolean(clip && validClip && !validationError);
   const navigate = (target: WizardStep) => props.onGoTo(target);
   const approve = (skip = false) => {
     const fields: WizardFields = {};
     if (step === 'source') { fields.videoId = youtubeId; fields.duration = sourceDuration; }
     if (clip) {
       fields.clipId = clip.id;
-      if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; }
+      if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; fields.partCount = sequenceParts.length; fields.duration = sequenceSeconds; }
       if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; }
       if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; fields.hook = !!clip.subtitles?.hook; fields.emphasisCount = clip.subtitles?.cues.filter(item => item.emphasis).length ?? 0; }
       if (step === 'audio') { fields.mode = clip.narration?.mode ?? 'off'; fields.voice = clip.narration?.voice ?? 'ko'; }
@@ -164,6 +169,22 @@ export function WizardPanel(props: Props) {
     </>}
 
     {step === 'clips' && <>
+      <div className="wizard-short-summary" aria-live="polite">
+        <strong>이번 쇼츠 · ${sequenceParts.length}개 장면 · ${time(sequenceSeconds)}</strong>
+        <small>하나의 원본에서 여러 구간을 골라 순서대로 연결합니다. 클립을 편집 대상으로 선택해도 쇼츠 구성 순서는 바뀌지 않습니다.</small>
+      </div>
+      <div className="wizard-clip-tabs" role="tablist" aria-label="클립 작업 전환">
+        {([
+          ['suggestions', '추천 클립'],
+          ['sequence', `쇼츠 구성 (${sequenceParts.length})`],
+          ['detail', '클립 상세'],
+        ] as const).map(([id, label]) => <button type="button" key={id} role="tab"
+          aria-selected={clipView === id} className={clipView === id ? 'active' : ''}
+          disabled={disabled && clipView !== id}
+          onClick={() => setClipView(id)}>{label}</button>)}
+      </div>
+      <div className="wizard-clip-scroll" role="tabpanel" aria-label={clipView === 'suggestions' ? '추천 클립' : clipView === 'sequence' ? '쇼츠 구성' : '클립 상세'}>
+        {clipView === 'suggestions' && <>
       <div className="wizard-insight">
         <strong>원본 대사 분석 → 클립 자동 추천</strong>
         <p>Whisper.cpp로 실제 음성을 로컬 전사한 뒤 문장 경계·질문·대사 밀도를 기준으로 쇼츠 후보를 추천합니다. 인기 점수나 인물 인식은 제공하지 않습니다.</p>
@@ -232,23 +253,64 @@ export function WizardPanel(props: Props) {
             </article>)}
           </div>
           <button type="button" className="primary full" disabled={disabled || !props.selectedRecommendationIds.length ||
-            clips.length >= 100} onClick={props.onAddRecommendations}>
+            clips.length >= 100} onClick={() => { props.onAddRecommendations(); setClipView('sequence'); }}>
             선택한 {props.selectedRecommendationIds.length}개 후보를 클립으로 추가
           </button>
         </>}
       </>}
-      <div className="section-rule" />
-      <p className="eyebrow">직접 선택 (분석 실패·무음 영상 대안)</p>
-      <button className="secondary full" type="button" disabled={disabled || !sourceValid || clips.length >= 100}
-        onClick={props.onAddClip}>+ 현재 재생 위치에서 수동 클립 만들기</button>
-      <div className="wizard-clip-list" aria-label="선택 가능한 클립">
-        {clips.map((item) => <button key={item.id} type="button"
-          className={`wizard-clip-card ${item.id === clip?.id ? 'active' : ''}`}
-          disabled={disabled} onClick={() => props.onSelectClip(item.id, item.start)}>
-          <strong>{item.title}</strong><span>{time(item.start)} → {time(item.end)} · {time(item.end - item.start)}</span>
-          <small>{item.id === clip?.id ? '선택한 클립' : '클립 선택·미리보기'}</small>
-        </button>)}
-      </div>
+
+          <p className="eyebrow">직접 선택 · 대사 분석 없이도 만들 수 있어요</p>
+          <button className="secondary full" type="button" disabled={disabled || !sourceValid || clips.length >= 100}
+            onClick={() => { props.onAddClip(); setClipView('sequence'); }}>+ 현재 재생 위치에서 수동 클립 만들기</button>
+          <p className="hint">추천 후보를 고르고 추가하면 쇼츠 구성에 자동으로 담깁니다. 순서 조정은 '쇼츠 구성'에서 합니다.</p>
+        </>}
+        {clipView === 'sequence' && <>
+          <div className="wizard-clip-section-heading">
+            <strong>쇼츠에 들어갈 장면과 재생 순서</strong>
+            <p>위에서 아래 순서로 재생됩니다. ▲▼로 순서를 바꾸고 '상세 편집'에서 IN/OUT을 다듬으세요.</p>
+          </div>
+          <div className="wizard-assembly-list" aria-label="최종 쇼츠 재생 순서">
+            {sequenceParts.map((item, index) => <article className="wizard-assembly-item" key={item.id}>
+              <span className="wizard-assembly-number">{index + 1}</span>
+              <div className="wizard-assembly-info">
+                <strong>{item.title}</strong>
+                <small>{time(item.start)} → {time(item.end)} · 장면 {time(item.end - item.start)}</small>
+              </div>
+              <div className="wizard-assembly-actions">
+                <button type="button" aria-label={`${item.title} 앞으로 이동`} disabled={disabled || index === 0}
+                  onClick={() => props.onComposition(item.id, 'up')}>▲</button>
+                <button type="button" aria-label={`${item.title} 뒤로 이동`} disabled={disabled || index === sequenceParts.length - 1}
+                  onClick={() => props.onComposition(item.id, 'down')}>▼</button>
+                <button type="button" disabled={disabled}
+                  onClick={() => { props.onSelectClip(item.id, item.start); setClipView('detail'); }}>상세 편집</button>
+                <button type="button" disabled={disabled} onClick={() => props.onComposition(item.id, 'toggle')}>제외</button>
+              </div>
+            </article>)}
+            {!sequenceParts.length && <p className="hint">아직 쇼츠에 포함된 장면이 없습니다. 추천 후보를 추가하거나 아래에서 수동 클립을 만드세요.</p>}
+          </div>
+          <div className="wizard-clip-section-heading"><strong>보관한 클립</strong><p>쇼츠에서 제외된 클립도 삭제되지 않습니다.</p></div>
+          <div className="wizard-clip-library">
+            {clips.filter((item) => !draft.shortClipIds.includes(item.id)).map((item) =>
+              <div key={item.id} className="wizard-clip-library-item">
+                <span>{item.title} · {time(item.end - item.start)}</span>
+                <button type="button" disabled={disabled ||
+                  (sequenceParts.length > 0 && sequenceParts[0].source !== item.source)}
+                  onClick={() => props.onComposition(item.id, 'toggle')}>+ 쇼츠에 포함</button>
+                <button type="button" disabled={disabled}
+                  onClick={() => { props.onSelectClip(item.id, item.start); setClipView('detail'); }}>수정</button>
+              </div>)}
+          </div>
+          <button className="secondary full" type="button" disabled={disabled || !sourceValid || clips.length >= 100}
+            onClick={props.onAddClip}>+ 현재 위치에서 장면 추가</button>
+          <p className="hint">전체 길이 {time(sequenceSeconds)} · ${sequenceParts.length}개 구간을 하나의 MP4로 만듭니다.</p>
+        </>}
+        {clipView === 'detail' && <>
+          <div className="wizard-clip-section-heading"><strong>클립 상세 편집</strong><p>이 화면에서는 선택한 클립의 구간과 대사를 편집합니다. 다른 목록을 다시 스크롤할 필요가 없습니다.</p></div>
+          <div className="wizard-detail-selector" aria-label="편집할 클립 선택">
+            {clips.map((item) => <button type="button" key={item.id}
+              className={item.id === clip?.id ? 'active' : ''} disabled={disabled}
+              onClick={() => props.onSelectClip(item.id, item.start)}>{item.title}</button>)}
+          </div>
       {clip && <>
         <label htmlFor="wizard-clip-title">클립 제목</label>
         <input id="wizard-clip-title" maxLength={100} value={clip.title} disabled={disabled}
@@ -301,7 +363,10 @@ export function WizardPanel(props: Props) {
           })}
         </div>}
       </>}
-      {!clips.length && <p className="hint">아직 선택한 클립이 없습니다. 원본 재생 위치에서 클립을 만들어 주세요.</p>}
+
+          {!clips.length && <p className="hint">먼저 추천 또는 쇼츠 구성에서 클립을 추가해 주세요.</p>}
+        </>}
+      </div>
     </>}
 
     {step === 'layout' && <>
@@ -490,7 +555,9 @@ export function WizardPanel(props: Props) {
         <p>원본 영상 미리보기는 합성 결과가 아닙니다. 최종 렌더 동등 프리뷰와 통합 QC는 AG6에서 추가됩니다.</p>
       </div>
       <dl className="wizard-summary">
-        <div><dt>선택 클립</dt><dd>{clip?.title ?? '없음'}</dd></div>
+        <div><dt>쇼츠 구성</dt><dd>{sequenceParts.length}개 클립 · 총 {time(sequenceSeconds)}</dd></div>
+        {sequenceParts.map((item, index) => <div key={item.id}><dt>{index + 1}번째 장면</dt><dd>{item.title} · {time(item.end - item.start)}</dd></div>)}
+        <div><dt>현재 편집 중</dt><dd>{clip?.title ?? '없음'}</dd></div>
         <div><dt>구간</dt><dd>{clip ? `${time(clip.start)} – ${time(clip.end)}` : '—'}</dd></div>
         <div><dt>스타일</dt><dd>{clip?.width ?? '—'}p · {clip?.style?.id ?? '기존 개별 설정'}</dd></div>
         <div><dt>자막</dt><dd>{clip?.narration?.mode === 'tts' ? `${splitNarration(clip.narration.text).length}개 · 나레이션 연결` : `${clip?.subtitles?.cues.length ?? 0}개 · 원본 대사`}</dd></div>
@@ -499,8 +566,8 @@ export function WizardPanel(props: Props) {
     </>}
     {step === 'export' && <>
       <div className="wizard-insight">
-        <strong>{clip ? `${clip.title} · ${clip.width}p MP4` : '선택한 클립이 없습니다'}</strong>
-        <p>기존에 확인된 YouTube 공개 영상→로컬 다운로드→FFmpeg 익스포트 경로를 사용합니다. 권리/업로드 승인은 별도입니다.</p>
+        <strong>{sequenceParts.length ? `${sequenceParts.length}개 장면 · ${time(sequenceSeconds)} · ${sequenceParts[0].width}p MP4` : '쇼츠에 클립을 포함해 주세요'}</strong>
+        <p>선택한 순서대로 하나의 세로 MP4를 생성합니다. 각 장면의 자막과 나레이션을 유지합니다. 여러 장면 MP4의 플랫폼 자동 게시 기능은 아직 지원하지 않습니다.</p>
       </div>
       <button type="button" className="primary full" disabled={!ready} onClick={props.onRender}>
         {rendering ? '출력 중…' : 'MP4 파일 출력'}</button>
