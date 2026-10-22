@@ -159,10 +159,11 @@ export function reconcileWizard(wizard: WizardRecord | undefined, before: Wizard
     if (!old) continue;
     const rangeChanged = old.start !== clip.start || old.end !== clip.end || old.source !== clip.source;
     const widthChanged = old.width !== clip.width;
+    const layoutChanged = JSON.stringify(old.layout ?? null) !== JSON.stringify(clip.layout ?? null);
     const captionsChanged = JSON.stringify(old.subtitles ?? null) !== JSON.stringify(clip.subtitles ?? null);
     const nameChanged = old.title !== clip.title;
     if (rangeChanged) next = staleSteps(next, clip.id, ['clips', 'layout', 'subtitles', 'audio', 'cta', 'review', 'export']);
-    else if (widthChanged) next = staleSteps(next, clip.id, ['layout', 'review', 'export']);
+    else if (widthChanged || layoutChanged) next = staleSteps(next, clip.id, ['layout', 'review', 'export']);
     else if (captionsChanged) next = staleSteps(next, clip.id, ['subtitles', 'review', 'export']);
     else if (nameChanged) next = staleSteps(next, clip.id, ['review', 'export']);
   }
