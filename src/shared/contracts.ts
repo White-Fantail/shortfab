@@ -18,6 +18,7 @@ export interface RenderRequest {
 }
 
 export interface RenderProgress {
+  phase?: 'download' | 'render';
   percent: number;
   seconds: number;
 }
