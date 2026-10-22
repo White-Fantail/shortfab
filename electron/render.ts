@@ -59,18 +59,20 @@ export class RenderTask {
         preset: subtitles?.preset ?? 'classic', cues: spoken.cues, hook: null,
       } : subtitles;
       const fixed = validateShortStyle(style)?.fixed;
-      const hasCaptions = Boolean(finalSubtitles?.cues.length || finalSubtitles?.hook || fixed);
+      // Older Hook metadata is preserved in the project, but cannot obscure a new fixed banner.
+      const captionTrack = fixed && finalSubtitles ? { ...finalSubtitles, hook: null } : finalSubtitles;
+      const hasCaptions = Boolean(captionTrack?.cues.length || captionTrack?.hook || fixed);
       // Fixed image/text overlays require the Canvas renderer, even with ASS available.
       const selected = fixed ? { binary: ffmpegBin(), mode: 'overlay' as const } :
         hasCaptions ? await selectCaptionRenderer(ffmpegBin()) :
         { binary: ffmpegBin(), mode: 'none' as const };
       if (hasCaptions) {
         subtitleDir ??= await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
-        if (selected.mode === 'ass' && finalSubtitles) {
+        if (selected.mode === 'ass' && captionTrack) {
           // Private ASCII basename via cwd avoids platform-specific filter path escaping.
-          await writeFile(join(subtitleDir, 'captions.ass'), buildAss(finalSubtitles, clipSeconds), { mode: 0o600 });
+          await writeFile(join(subtitleDir, 'captions.ass'), buildAss(captionTrack, clipSeconds), { mode: 0o600 });
         } else {
-          await createCaptionOverlay(finalSubtitles, clipSeconds, request.width, subtitleDir,
+          await createCaptionOverlay(captionTrack, clipSeconds, request.width, subtitleDir,
             () => this.cancelled, fixed);
         }
       }

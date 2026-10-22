@@ -31,7 +31,7 @@ export function StyleGallery({ selected, configuredStyle, videoId, frameImage, f
         return <button type="button" key={style.id}
           className={`style-gallery-card ${selected === style.id ? 'is-selected' : ''}`}
           aria-pressed={selected === style.id} disabled={disabled}
-          onClick={() => onChoose(style.id)}>
+          onClick={() => { if (selected !== style.id) onChoose(style.id); }}>
           <span className={`style-card-portrait preview-layout-${style.layout}`} aria-hidden="true">
             {thumbnail ? <>
               {style.layout === 'blur-fill' && <img className="style-thumb-blur" src={thumbnail} alt="" loading="lazy" />}
