@@ -28,6 +28,12 @@
 - `src/App.tsx`, `src/WizardPanel.tsx`, `src/StyleGallery.tsx`, `src/styles.css`: 선택/수정/검증/저장 경로 공유, 자막/Hook 원본 참고 오버레이. YouTube IFrame 오버레이가 최종 크롭 동등 프리뷰는 아님.
 - 새 스타일/Hook/강조는 `JSON.stringify(clip.subtitles)`에 반영되므로 스타일을 변경하면 이전 MP4는 최신 출판 자료로 인정하지 않는다. `reconcileWizard`가 해당 클립의 subtitles→review/export를 재검토 처리하며 다른 클립은 건드리지 않는다.
 
+## macOS 일반 FFmpeg에서 자막 출력 장애 대응 (dev, 2026-10-22)
+
+- 일반 Homebrew `ffmpeg`가 `ass` 필터를 제공하지 않아 실제 사용자 MP4 출력이 차단됨. `electron/ffmpeg-ass.ts`의 FFmpeg 선택에서 libass 빌드 우선, 설치되지 않은 경우 기존 일반 FFmpeg를 사용해 `overlay` 자막 합성을 수행하도록 보완.
+- `electron/caption-overlay.ts`는 Electron의 격리된 숨김 Canvas를 이용해 검증된 자막 문구를 OS 글꼴로 PNG에 렌더하고, IN 기준 타임라인에 맞춘 FFconcat 한 스트림으로 영상에 합성. Hook과 일반 자막의 겹침, 자막 없는 공백, 강조, 8종 프리셋 및 720/1080을 처리한다. 텍스트를 FFmpeg 필터식으로 보간하지 않음.
+- 기본 ASS 필터가 있는 FFmpeg의 기존 렌더 경로는 보존. Canvas 방식은 libass와 폰트·행간·그림자 등이 약간 다를 수 있으며 **실제 Mac 기기에서 성공/시각 품질 확인이 필요**. 자동 테스트는 타임라인/그래프와 합성 회귀를 별도로 실행한다.
+
 ## 자동 테스트 vs 실사용 검증
 
 ```bash

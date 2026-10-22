@@ -14,6 +14,12 @@ ShortFab은 **기존 YouTube URL만 입력하면 AI가 단계별로 클립·화�
 
 > **현재 단계 (2026-10-22): 사용자 실기 확인 완료 — 실제 YouTube 링크로 클립을 선택해 MP4 익스포트 성공.** yt-dlp 공개 영상 다운로드/로컬 캐시/FFmpeg 클립 인코딩 코드 및 CI 자동 테스트도 구현했습니다. **실영상 3개 연속 출력·세부 품질 QC·캐시 재사용·macOS/Windows 설치 패키징 및 실제 YouTube 업로드는 미완료**입니다. 승인 원본(YF-1)·서명 파트너 카탈로그(YF-2)는 고급 옵션으로 유지됩니다. [전체 구현/수용 현황](docs/IMPLEMENTATION_STATUS.md).
 
+## macOS FFmpeg 경량판 자막 출력 호환성 (2026-10-22 dev)
+
+- Homebrew 일반 `ffmpeg`에서 `ass` 필터가 빠진 경우에도 MP4 자막 번인을 **포기하지 않습니다**. `ffmpeg-full`의 libass 실행 파일이 있으면 우선 사용하고, 없으면 Electron의 로컬 Canvas로 **한글·영어 자막/Hook을 투명 PNG 타임라인**에 그려 FFmpeg `overlay` 필터로 합성합니다. 이 대체 경로는 libass나 FFmpeg drawtext를 필요로 하지 않습니다.
+- 한 화면의 동시 자막과 Hook을 합성한 프레임 이미지를 이어 붙인 단일 FFconcat 입력을 사용하며, 시간이 비어 있는 구간도 보존합니다. 기존 FFmpeg 오디오·크롭/블러·MP4 설정, 선택된 스타일 ID/데이터를 유지합니다.
+- Canvas 스타일은 ASS의 근사 구현으로 **글꼴/테두리/줄바꿈이 완전히 같지 않을 수 있습니다**. macOS 한글 실제 출력 확인이 필요합니다. `ffmpeg-full` 설치는 여전히 최고 충실도의 ASS 출력에 권장하지만 필수는 아닙니다.
+
 ## 새 구현: AG4 자막·Hook 편집 (dev · 2026-10-22)
 
 04 자막 단계에서 **8개 스타일 카드**(classic, bold, minimal, boxed, neon, cinema, impact, topline)를 슬라이드하며 선택할 수 있습니다. 카드에 실제 클립 정지 프레임을 불러오거나 썸네일로 참고하고, 선택한 스타일은 기존 FFmpeg/ASS로 실제 MP4에 적용됩니다.

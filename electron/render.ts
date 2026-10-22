@@ -8,7 +8,8 @@ import { type RenderProgress, type RenderRequest } from '../src/shared/contracts
 import { layoutFilter, type LayoutStyle } from '../src/shared/layout-styles.js';
 import { probeMedia } from './media.js';
 import { buildAss } from './subtitles.js';
-import { captionFFmpegBinary } from './ffmpeg-ass.js';
+import { selectCaptionRenderer } from './ffmpeg-ass.js';
+import { captionOverlayGraph, createCaptionOverlay } from './caption-overlay.js';
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
 
 const ffmpegBin = () => process.env.SHORTFAB_FFMPEG_PATH || 'ffmpeg';
@@ -41,29 +42,42 @@ export class RenderTask {
     let subtitleDir: string | null = null;
     const filter = layoutFilter(request.width, layout);
     const hasCaptions = Boolean(subtitles?.cues.length || subtitles?.hook);
-    const imageFilters = filter.complex
-      ? ['-filter_complex', filter.graph + (hasCaptions ? ';[v]ass=filename=captions.ass[outputv]' : ''),
-        '-map', hasCaptions ? '[outputv]' : '[v]']
-      : ['-map', '0:v:0', '-vf', filter.graph + (hasCaptions ? ',ass=filename=captions.ass' : '')];
-    const args = [
-      '-hide_banner', '-nostdin', '-loglevel', 'error',
-      '-ss', request.start.toFixed(3), '-i', sourcePath,
-      '-t', clipSeconds.toFixed(3),
-      ...imageFilters, '-map', '0:a:0?',
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
-      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
-      '-movflags', '+faststart', '-progress', 'pipe:1',
-      '-y', temporaryPath,
-    ];
     try {
-      const renderBinary = hasCaptions ? await captionFFmpegBinary(ffmpegBin()) : ffmpegBin();
+      const selected = hasCaptions ? await selectCaptionRenderer(ffmpegBin()) :
+        { binary: ffmpegBin(), mode: 'none' as const };
       if (hasCaptions && subtitles) {
-        // Private ASCII basename via cwd avoids filter path quoting, including Windows drives.
         subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
-        await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
+        if (selected.mode === 'ass') {
+          // Private ASCII basename via cwd avoids platform-specific filter path escaping.
+          await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
+        } else {
+          await createCaptionOverlay(subtitles, clipSeconds, request.width, subtitleDir,
+            () => this.cancelled);
+        }
       }
+      if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
+      const imageFilters = selected.mode === 'overlay'
+        ? ['-filter_complex', captionOverlayGraph(filter.graph, filter.complex), '-map', '[outputv]']
+        : filter.complex
+          ? ['-filter_complex', filter.graph + (selected.mode === 'ass' ?
+              ';[v]ass=filename=captions.ass[outputv]' : ''),
+            '-map', selected.mode === 'ass' ? '[outputv]' : '[v]']
+          : ['-map', '0:v:0', '-vf', filter.graph +
+            (selected.mode === 'ass' ? ',ass=filename=captions.ass' : '')];
+      const args = [
+        '-hide_banner', '-nostdin', '-loglevel', 'error',
+        '-ss', request.start.toFixed(3), '-i', sourcePath,
+        ...(selected.mode === 'overlay' ? ['-f', 'concat', '-safe', '0', '-i', 'captions.ffconcat'] : []),
+        '-t', clipSeconds.toFixed(3),
+        ...imageFilters, '-map', '0:a:0?',
+        '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
+        '-movflags', '+faststart', '-progress', 'pipe:1',
+        '-y', temporaryPath,
+      ];
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(renderBinary, args, { windowsHide: true, env: externalToolEnv(), cwd: subtitleDir ?? undefined });
+        const child = spawn(selected.binary, args, {
+          windowsHide: true, env: externalToolEnv(), cwd: subtitleDir ?? undefined });
         this.child = child;
         let stderr = '';
         let stdoutBuffer = '';

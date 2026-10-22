@@ -64,3 +64,23 @@ export async function captionFFmpegBinary(
     'SHORTFAB_FFMPEG_PATH를 올바른 ffmpeg 실행 파일로 지정하세요.',
   );
 }
+
+/** Use libass when available, otherwise let Electron paint a timed transparent
+ * caption stream. Standard Homebrew FFmpeg can encode that stream without libass. */
+export async function selectCaptionRenderer(
+  preferred: string,
+  alternatives: readonly string[] = process.platform === 'darwin' &&
+    !process.env.SHORTFAB_FFMPEG_PATH?.trim()
+      ? ['/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg', '/usr/local/opt/ffmpeg-full/bin/ffmpeg']
+      : [],
+  probe: (binary: string) => Promise<AssCapability> = probeAssCapability,
+): Promise<{ binary: string; mode: 'ass' | 'overlay' }> {
+  let firstUsable: string | null = null;
+  for (const binary of new Set([preferred, ...alternatives])) {
+    const result = await probe(binary);
+    if (result === 'supported') return { binary, mode: 'ass' };
+    if (result === 'unsupported' && !firstUsable) firstUsable = binary;
+  }
+  if (firstUsable) return { binary: firstUsable, mode: 'overlay' };
+  throw new Error('FFmpeg 실행 파일을 찾을 수 없습니다. brew install ffmpeg 또는 SHORTFAB_FFMPEG_PATH 설정을 확인하세요.');
+}
