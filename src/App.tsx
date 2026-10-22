@@ -41,6 +41,7 @@ function App() {
   const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
+  const [personalToolReady, setPersonalToolReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
   const [publishing, setPublishing] = useState<PublishOverview | null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
@@ -180,6 +181,9 @@ function App() {
       }
     });
     if (window.shortfab) {
+      void window.shortfab.personalToolAvailable()
+        .then((ready) => { if (live) setPersonalToolReady(ready); })
+        .catch(() => { if (live) setPersonalToolReady(false); });
       void window.shortfab.partnerCatalogStatus()
         .then(({ configured }) => { if (live) setPartnerConfigured(configured); })
         .catch(() => { if (live) setPartnerConfigured(false); });
@@ -738,7 +742,11 @@ function App() {
           <div className="export-spec"><span>클립 길이</span><strong>{formatTime(clip ? clip.end - clip.start : 0)}</strong></div>
           {sourceTab === 'youtube' && <p className="hint">{linkedAsset ?
             '연결된 원본으로 출력합니다.' :
-            '개인용 직접 출력: MP4 익스포트를 누르면 공개 YouTube 영상을 가져와 선택 구간을 잘라냅니다. yt-dlp와 FFmpeg 설치가 필요합니다.'}</p>}
+            'MP4 버튼을 누르면 YouTube 공개 영상을 로컬로 가져온 뒤 선택 구간을 세로 영상으로 출력합니다.'}</p>}
+          {sourceTab === 'youtube' && !linkedAsset && personalToolReady === false &&
+            <p className="warning">다운로드 도구 미설치. Mac 터미널에서 <code>brew install yt-dlp ffmpeg</code> 실행 후 앱을 다시 시작하세요.
+              <a href="https://github.com/yt-dlp/yt-dlp/wiki/Installation" target="_blank" rel="noreferrer"> 설치 안내 ↗</a>
+            </p>}
           <button className="primary full export-button" disabled={!canRender} onClick={() => void renderClip()}>
             {rendering ? '렌더링 중…' : '선택 클립 MP4 익스포트'}
           </button>
