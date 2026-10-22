@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('shortfab', {
   bindPartnerSource: (): Promise<ProjectView> => ipcRenderer.invoke('project:bindPartner'),
   startRender: (request: RenderRequest): Promise<RenderResult> => ipcRenderer.invoke('render:start', request),
   cancelRender: (): Promise<void> => ipcRenderer.invoke('render:cancel'),
+  personalToolAvailable: (): Promise<boolean> => ipcRenderer.invoke('personal:status'),
   publishOverview: (): Promise<PublishOverview> => ipcRenderer.invoke('publish:overview'),
   connectYouTube: (): Promise<PublishOverview> => ipcRenderer.invoke('publish:connect'),
   disconnectYouTube: (): Promise<PublishOverview> => ipcRenderer.invoke('publish:disconnect'),
