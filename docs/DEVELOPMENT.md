@@ -106,3 +106,9 @@ YouTube URL로 실제 클립 3개를 먼저 저장합니다. 권리자 제공 �
 실제 이용허가를 받은 파트너가 준비되면 앱 실행 전 `SHORTFAB_APPROVED_SOURCE_HOSTS`에 HTTPS 카탈로그와 미디어 제공 호스트를 **모두** 등록하고 `SHORTFAB_PARTNER_CATALOG_ENDPOINT` 및 `SHORTFAB_PARTNER_PUBLIC_KEY_B64`(Ed25519 SPKI DER base64 공개키)를 설정합니다. YouTube URL을 입력해 IFrame 메타데이터가 확보되면 “YouTube ID로 승인 원본 자동 찾기”가 활성화됩니다. 404는 등록된 원본 없음으로 안내하고, 등록된 영상이면 signed payload가 현재 videoId 및 허가와 일치해야 합니다.
 
 서명 키의 비공개 부분은 **파트너 서버에만** 보유하며 앱/리포지토리에 절대 넣지 마세요. 단위 검증: `electron/partner-contract.test.ts`. YF-1의 `electron/render.test.ts`로 3개 합성 MP4 렌더를 자동 확인합니다. 파트너 계정/API/실영상 연결 시험과 macOS·Windows 패키징 검증은 별도로 수행해야 합니다. [파트너 카탈로그 계약](PARTNER_CATALOG.md).
+
+## 개인용 YouTube URL 직접 MP4 익스포트
+
+macOS에서 `brew install yt-dlp ffmpeg` 설치 후 `npm run dev`로 시작합니다. 공개 YouTube URL → 영상 재생/IN·OUT 선택 → **클립 추가** → **MP4 익스포트**. 이전처럼 권리자/파트너 바인딩을 먼저 연결하지 않아도 개인용 직접 가져오기 코드가 실행됩니다. Electron은 `SHORTFAB_YTDLP_PATH` (선택) 또는 PATH의 yt-dlp를 실행합니다. 다운로드한 원본은 앱 사용자 데이터 폴더 `sources/personal/{videoId}.mp4`에 캐시되어 다음 구간에서 재사용됩니다.
+
+테스트: `electron/personal.test.ts`에서 가짜 yt-dlp로 인수 구성과 캐시를 확인하고 `electron/render.test.ts`에서 합성 미디어 3개를 실제 FFmpeg로 출력합니다. **실제 YouTube 네트워크 다운로드, 패키징 Mac/Windows 시험은 추가 필요**하며 공개 동영상/저작권자·서비스 약관에 따라 다운로드가 지원되지 않을 수 있습니다. 취소·실패 시 임시 파일을 삭제합니다. [개인용 직접 출력 명세](PERSONAL_YOUTUBE_EXPORT.md).
