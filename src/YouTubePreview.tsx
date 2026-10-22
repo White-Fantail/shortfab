@@ -18,6 +18,7 @@ interface PlayerAPI {
     playerVars: Record<string, number>;
     events: {
       onReady: () => void;
+      onStateChange: (event: { data: number }) => void;
       onError: (event: { data: number }) => void;
     };
   }) => Player;
@@ -73,18 +74,19 @@ interface Props {
   end: number | null;
   loop: boolean;
   onTime: (time: number) => void;
+  onPlaying: (playing: boolean) => void;
   onDuration: (videoId: string, seconds: number) => void;
 }
 
 export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTubePreview(
-  { videoId, start, end, loop, onTime, onDuration }, ref,
+  { videoId, start, end, loop, onTime, onPlaying, onDuration }, ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
   const player = useRef<Player | null>(null);
   const seekGuard = useRef(new SeekTimeGuard());
-  const latest = useRef({ start, end, loop, onTime, onDuration });
+  const latest = useRef({ start, end, loop, onTime, onPlaying, onDuration });
   const [error, setError] = useState('');
-  latest.current = { start, end, loop, onTime, onDuration };
+  latest.current = { start, end, loop, onTime, onPlaying, onDuration };
 
   useImperativeHandle(ref, () => ({
     seek(time) {
@@ -107,11 +109,14 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
       if (cancelled || !host.current) return;
       instance = new YT.Player(host.current, {
         videoId, width: '100%', height: '100%',
-        playerVars: { playsinline: 1, controls: 1, rel: 0 },
+        // The app owns its own non-jumping scrubber and live clock. Avoid
+        // a second (native red) seek bar with different buffering semantics.
+        playerVars: { playsinline: 1, controls: 0, rel: 0 },
         events: {
           onReady: () => {
             if (cancelled || !instance) return;
             player.current = instance;
+            latest.current.onPlaying(instance.getPlayerState() === 1);
             timer = setInterval(() => {
               if (!instance || cancelled) return;
               const duration = instance.getDuration();
@@ -138,6 +143,9 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
                 latest.current.onTime(time);
               }
             }, 250);
+          },
+          onStateChange: ({ data }) => {
+            if (!cancelled) latest.current.onPlaying(data === 1);
           },
           onError: ({ data }) => {
             if (cancelled) return;
