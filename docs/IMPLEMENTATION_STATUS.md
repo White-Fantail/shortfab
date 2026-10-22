@@ -57,6 +57,12 @@
 - 자동 검증: `src/shared/caption-suggestions.test.ts`, `electron/subtitles.test.ts`, `electron/layout-render.test.ts`; 마지막 CI와 기기별 한/영 실제 자막 확인은 별도다. [AG4 사용·테스트](AG4_CAPTIONS.md).
 - 실제 YouTube/한영 GGML 모델 설치, macOS/Windows, 장문·폰트·안전 영역/영상 렌더 일치, AG1/AG2/AG3 사용자 수용은 아직 **미확인**. AG4 전체 Exit 완료로 표시하지 않는다.
 
+## 2026-10-22 사용자 보고 오류에 대한 dev 수정 (실기 재검증 대기)
+
+- **자막 MP4 출력:** 사용 환경의 `No option name near 'captions.ass'`는 libass 없는 FFmpeg에서 발생할 수 있음. 자막 렌더 전 `ass` 필터 검사, `ffmpeg-full` Homebrew 경로 자동 탐색, 명시적 `filename=` 옵션 및 설치 안내로 수정. 자막 없는 출력은 기존 경로 유지.
+- **Whisper 모델 설치:** 현재 Hugging Face CDN/Xet 리다이렉트 도메인이 기존 제한 목록에 없어 설치가 차단되는 문제를 공식 `*.hf.co` 영역 HTTPS 허용으로 수정. 고정 모델 크기·SHA-256·취소·임시 파일 정리 유지.
+- 단위/합성 회귀 테스트와 CI 및 사용자 Mac에서 기본 모델 148MB 다운로드·자막 포함 MP4 실기 검증은 구분한다. 실제 사용자 재확인 전 전체 수용 완료로 표시하지 않는다.
+
 ## 수용 및 구현 현황
 
 | 기능/흐름 | 상태 | 확인 근거 / 남은 범위 |

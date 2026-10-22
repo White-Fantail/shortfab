@@ -24,7 +24,7 @@
 
 - `src/shared/subtitles.ts`: 기존 `SubtitleTrack`에 optional `hook`, `SubtitleCue.emphasis`를 추가하고 과거 JSON 데이터는 그대로 읽는다. 모든 스타일은 고정 ID/ASS 프리셋만 허용. Hook 텍스트와 시간은 별도 검증한다.
 - `src/shared/caption-suggestions.ts`: AG2 분석 결과에서 실제 전사 문장 범위/문장 길이/연속성을 기준으로 클립 자막을 생성. Hook/강조를 '적용 가능 제안'으로 만든다.
-- `electron/subtitles.ts`: libass 상단 Hook과 일반 자막을 분리하고 정확한 상대 시간에 렌더. 전체 큐 강조 스타일을 독립 ASS 스타일로 출력하며 ASS 제어 태그 입력은 기존처럼 무력화한다. `electron/render.ts`는 **Hook만 있는 경우도** 자막 파일을 작성하고 MP4에 합성한다.
+- `electron/subtitles.ts`: libass 상단 Hook과 일반 자막을 분리하고 정확한 상대 시간에 렌더. 전체 큐 강조 스타일을 독립 ASS 스타일로 출력하며 ASS 제어 태그 입력은 기존처럼 무력화한다. `electron/render.ts`는 **Hook만 있는 경우도** 자막 파일을 작성하고 MP4에 합성한다. **2026-10-22 보완:** `ass=filename=captions.ass` 명시 및 실행 FFmpeg의 `ass` 필터 사전 검사·macOS `ffmpeg-full` 탐색. 필터가 없으면 FFmpeg 파서 오류 대신 설치 안내를 표시한다. 이 오류는 사용자 macOS 실기 재검증 전이다.
 - `src/App.tsx`, `src/WizardPanel.tsx`, `src/StyleGallery.tsx`, `src/styles.css`: 선택/수정/검증/저장 경로 공유, 자막/Hook 원본 참고 오버레이. YouTube IFrame 오버레이가 최종 크롭 동등 프리뷰는 아님.
 - 새 스타일/Hook/강조는 `JSON.stringify(clip.subtitles)`에 반영되므로 스타일을 변경하면 이전 MP4는 최신 출판 자료로 인정하지 않는다. `reconcileWizard`가 해당 클립의 subtitles→review/export를 재검토 처리하며 다른 클립은 건드리지 않는다.
 

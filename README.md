@@ -141,6 +141,12 @@ YouTube 업로드 개발 시 Desktop OAuth 클라이언트 ID를 `SHORTFAB_GOOGL
 
 자막/스타일을 수정한 뒤에는 **기존 MP4를 재사용해 바로 YouTube 게시하지 못하도록** 출력물과 자막 구성 일치 여부를 확인합니다. 자동 STT는 로컬 Whisper.cpp 연동 코드를 추가했으며 실제 모델/음성 수용은 별도입니다. 원격 스타일 카탈로그와 나레이션·CTA는 아직 미구현입니다. 테스트는 `src/shared/subtitles.test.ts`, `electron/subtitles.test.ts`, `electron/render.test.ts`에서 검증합니다.
 
+## FFmpeg 자막 렌더·Whisper 모델 설치 문제 해결 (2026-10-22 수정)
+
+- **`No option name near 'captions.ass'`**는 macOS에서 FFmpeg에 `ass`/libass 필터가 빠져 있을 때 발생할 수 있습니다. 이제 자막 출력 전에 필터를 검사하고 Homebrew의 `ffmpeg-full` 실행 파일이 설치돼 있다면 자동 선택합니다. 설치 명령: `brew install ffmpeg-full`. 별도 경로를 사용할 때는 `SHORTFAB_FFMPEG_PATH`를 해당 바이너리로 지정하세요. 자막 없는 MP4는 기존 FFmpeg로 그대로 출력됩니다.
+- **Whisper 모델 URL 허용 오류**: 공식 Hugging Face가 제공하는 지역별 `*.hf.co` CDN/Xet 리다이렉트를 허용합니다. 여전히 HTTPS만 허용하고 외부 다운로드 모델의 파일 크기와 고정 SHA-256을 검사합니다. 다운로드 실패/중단 시 손상 파일은 설치하지 않습니다.
+- 수정 코드는 `dev`에 반영한 것이며, 실제 사용자의 macOS FFmpeg 구성 및 Whisper 148MB 다운로드 재확인은 별도입니다. [로컬 STT 안내](docs/STT_LOCAL.md) · [AG4 자막](docs/AG4_CAPTIONS.md).
+
 ## AI 자동 자막 생성 (Phase 1 코드 추가 · 2026-10-22)
 
 기존 **자막 편집** 패널에서 로컬 Whisper 음성 인식으로 선택한 클립의 자막 구간을 생성할 수 있습니다. 한국어 / 영어 / 언어 자동 감지 선택을 지원하며, 생성 결과는 **기존 수동 자막과 같은 편집·자동 저장·4개 스타일·FFmpeg 자막 번인** 파이프라인으로 연결됩니다. 생성 결과 적용 전 기존 자막 덮어쓰기 확인을 요청하며 취소/실패 시 기존 자막은 유지됩니다.

@@ -8,6 +8,7 @@ import { type RenderProgress, type RenderRequest } from '../src/shared/contracts
 import { layoutFilter, type LayoutStyle } from '../src/shared/layout-styles.js';
 import { probeMedia } from './media.js';
 import { buildAss } from './subtitles.js';
+import { captionFFmpegBinary } from './ffmpeg-ass.js';
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
 
 const ffmpegBin = () => process.env.SHORTFAB_FFMPEG_PATH || 'ffmpeg';
@@ -41,9 +42,9 @@ export class RenderTask {
     const filter = layoutFilter(request.width, layout);
     const hasCaptions = Boolean(subtitles?.cues.length || subtitles?.hook);
     const imageFilters = filter.complex
-      ? ['-filter_complex', filter.graph + (hasCaptions ? ';[v]ass=captions.ass[outputv]' : ''),
+      ? ['-filter_complex', filter.graph + (hasCaptions ? ';[v]ass=filename=captions.ass[outputv]' : ''),
         '-map', hasCaptions ? '[outputv]' : '[v]']
-      : ['-map', '0:v:0', '-vf', filter.graph + (hasCaptions ? ',ass=captions.ass' : '')];
+      : ['-map', '0:v:0', '-vf', filter.graph + (hasCaptions ? ',ass=filename=captions.ass' : '')];
     const args = [
       '-hide_banner', '-nostdin', '-loglevel', 'error',
       '-ss', request.start.toFixed(3), '-i', sourcePath,
@@ -55,13 +56,14 @@ export class RenderTask {
       '-y', temporaryPath,
     ];
     try {
+      const renderBinary = hasCaptions ? await captionFFmpegBinary(ffmpegBin()) : ffmpegBin();
       if (hasCaptions && subtitles) {
         // Private ASCII basename via cwd avoids filter path quoting, including Windows drives.
         subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
         await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
       }
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(ffmpegBin(), args, { windowsHide: true, env: externalToolEnv(), cwd: subtitleDir ?? undefined });
+        const child = spawn(renderBinary, args, { windowsHide: true, env: externalToolEnv(), cwd: subtitleDir ?? undefined });
         this.child = child;
         let stderr = '';
         let stdoutBuffer = '';

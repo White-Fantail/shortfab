@@ -10,14 +10,19 @@ export const DEFAULT_WHISPER_MODEL = {
   sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
 } as const;
 
-const TRUSTED_HOSTS = new Set([
-  'huggingface.co', 'cdn-lfs.hf.co', 'cas-bridge.xethub.hf.co', 'transfer.xethub.hf.co',
-]);
+// Hugging Face serves model bytes from region-specific CDN/Xet subdomains. The
+// provider documents the hf.co suffix as the stable download/redirect boundary.
+// HTTPS, no credentials/custom port and an exact pinned SHA-256 remain required.
+function isHuggingFaceHost(hostname: string): boolean {
+  return hostname === 'huggingface.co' ||
+    hostname.endsWith('.huggingface.co') ||
+    hostname.endsWith('.hf.co');
+}
 
 function trustedModelUrl(value: string): string {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.port || url.username || url.password ||
-      !TRUSTED_HOSTS.has(url.hostname)) {
+      !isHuggingFaceHost(url.hostname)) {
     throw new Error('Whisper 모델 다운로드 주소가 허용되지 않았습니다.');
   }
   return url.toString();

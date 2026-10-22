@@ -29,6 +29,52 @@ describe('pinned Whisper model installer', () => {
       expect(progress.at(-1)).toBe(100);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
+  it('follows regional official Hugging Face CDN redirects and verifies the final bytes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shortfab-model-cdn-'));
+    try {
+      const original = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin';
+      const cdn1 = 'https://cdn-lfs-us-1.hf.co/object';
+      const cdn2 = 'https://us.aws.cdn.hf.co/object';
+      const requested: string[] = [];
+      await downloadPinnedModel({
+        destination: join(dir, 'model.bin'),
+        expectedBytes: payload.length, expectedSha256: sha,
+        fetcher: (async (url: string) => {
+          requested.push(url);
+          if (url === original) return new Response(null, {
+            status: 302, headers: { location: cdn1 },
+          });
+          if (url === cdn1) return new Response(null, {
+            status: 307, headers: { location: cdn2 },
+          });
+          return new Response(payload);
+        }) as typeof fetch,
+      });
+      expect(requested).toEqual([original, cdn1, cdn2]);
+      expect(await readFile(join(dir, 'model.bin'))).toEqual(payload);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  it('rejects lookalike hosts, non-HTTPS redirect, userinfo and custom ports', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shortfab-model-security-'));
+    try {
+      const redirects = [
+        'http://cdn-lfs-us-1.hf.co/object',
+        'https://hf.co.evil.example/object',
+        'https://cdn-lfs-us-1.hf.co:8443/object',
+        'https://user@cdn-lfs-us-1.hf.co/object',
+      ];
+      for (const redirect of redirects) {
+        await expect(downloadPinnedModel({
+          destination: join(dir, 'model.bin'),
+          expectedBytes: payload.length, expectedSha256: sha,
+          fetcher: (async () => new Response(null, {
+            status: 302, headers: { location: redirect },
+          })) as typeof fetch,
+        })).rejects.toThrow('허용되지');
+      }
+      expect(await readdir(dir)).toEqual([]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
   it('rejects a malicious redirect and cleans up a damaged model download', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'shortfab-model-reject-'));
     try {

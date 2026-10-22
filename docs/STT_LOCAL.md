@@ -18,6 +18,12 @@ ShortFab **자막 편집 → 기본 한국어·영어 모델 설치 (약 148MB)*
 
 Windows는 `whisper-cli.exe`, `ffmpeg.exe` 설치/경로 구성이 필요합니다. 환경변수 `SHORTFAB_WHISPER_PATH`, `SHORTFAB_FFMPEG_PATH`, `SHORTFAB_WHISPER_MODEL_PATH`를 각각 CLI, FFmpeg, 모델의 경로에 지정할 수 있습니다. 모델 경로는 Electron 사용자 데이터 폴더의 `settings/stt.json`에 로컬 저장하며 UI에는 파일명만 표시됩니다. 환경변수 모델 지정이 있으면 그 경로가 우선합니다.
 
+## 설치 실패 진단 (2026-10-22 수정)
+
+- Whisper 기본 모델 설치는 `huggingface.co`의 공식 `/resolve/` URL에서 시작합니다. 파일은 `cdn-lfs-us-1.hf.co`, `us.aws.cdn.hf.co`, `cas-bridge.xethub.hf.co` 등 제공사의 CDN/Xet 영역으로 이동할 수 있으므로 `*.hf.co` 하위 호스트에 한해 HTTPS 리다이렉트를 허용합니다. 유사 도메인, HTTP, URL 자격증명, 임의 포트는 차단하며 최종 파일은 **고정 SHA-256·바이트 수**가 일치해야만 설치합니다. 실제 148MB 온라인 다운로드 재검증은 별도입니다.
+- 자막 MP4 익스포트에 쓰는 FFmpeg는 일반 인코딩뿐 아니라 **`ass` 비디오 필터(libass)**를 지원해야 합니다. macOS Homebrew `ffmpeg`가 해당 필터 없이 설치됐다면 `brew install ffmpeg-full`을 실행합니다. ShortFab은 시스템 FFmpeg의 `ass` 필터를 먼저 확인하고, 없으면 일반적인 Homebrew `ffmpeg-full` 설치 경로를 자동 탐색합니다. 사용자 설정 `SHORTFAB_FFMPEG_PATH`는 우선하며, 해당 실행 파일에서 libass를 찾지 못하면 해결 방법을 표시합니다.
+- 명령으로 직접 확인: `ffmpeg -hide_banner -filters | grep -E ' ass +V->V'`. `ass` 항목이 없으면 libass 포함 FFmpeg가 필요합니다.
+
 ## 사용자 흐름
 
 1. YouTube URL 또는 로컬 파일에서 **0.2초~10분** 길이의 클립을 선택합니다.
