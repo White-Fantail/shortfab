@@ -1,5 +1,8 @@
 # ShortFab 개발 로드맵 v2.0 — AI Guided Creation
 
+**2026-10-22 검증:** dev GitHub Actions Code Quality run `39755824920`에서 Type check · Lint · 단위/FFmpeg 합성 테스트 · 웹/Electron 빌드 **전부 통과**. Windows/사용자 실제 YouTube 다중 클립 GUI 검증은 미실시.
+
+
 ## 2026-10-22 dev: 멀티클립 쇼츠 및 클립 화면 UX
 
 - [x] 쇼츠 최종 재생 순서(`shortClipIds`)와 개별 보관 클립/편집 선택 분리; 과거 프로젝트의 선택 클립 하나만 이관, 중복 ID·원본 혼합 차단
