@@ -343,3 +343,12 @@
   .wizard-suggestion-meta { align-items:flex-start; flex-direction:column; gap:6px; }
   .wizard-rerank button { flex:1 0 44%; }
 }
+
+.wizard-transcript-editor { margin:21px 0 10px; background:#1d1f2c; border:1px solid #393a4a; border-radius:11px; padding:14px; }
+.wizard-transcript-editor > strong { font-size:13px; }
+.wizard-speech-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 2px; border-top:1px solid #353849; }
+.wizard-speech-row span { font-size:11px; line-height:1.6; color:#dfdde7; min-width:0; }
+.wizard-speech-row small { font-size:10px; color:#b69bfa; margin-right:5px; white-space:nowrap; }
+.wizard-speech-row div { display:flex; gap:4px; flex:0 0 auto; }
+.wizard-speech-row button { font-size:10px; padding:6px 8px; }
+@media(max-width:650px) { .wizard-speech-row { align-items:flex-start; flex-direction:column; } }
