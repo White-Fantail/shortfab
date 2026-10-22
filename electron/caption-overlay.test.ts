@@ -2,8 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { captionIntervals, captionOverlayGraph } from './caption-overlay';
+import { CAPTION_CANVAS_SCRIPT_FOR_TEST, captionIntervals, captionOverlayGraph } from './caption-overlay';
 
 describe('libass-free caption image timeline', () => {
   it('preserves cue gaps and independent hook overlap', () => {
@@ -73,4 +74,33 @@ describe('FFmpeg PNG overlay composition without libass', () => {
       await rm(dir, { recursive: true, force: true });
     }
   }, 40_000);
+});
+
+describe('sandboxed caption canvas script', () => {
+  it('parses and draws Korean captions and a separate hook using only local canvas', () => {
+    const drawn: string[] = [];
+    const canvas = {
+      width: 0, height: 0,
+      getContext: () => ({
+        measureText: (value: string) => ({ width: value.length * 15 }),
+        fillText: (value: string) => drawn.push(value),
+        strokeText: () => {},
+        fillRect: () => {},
+      }),
+      toDataURL: () => 'data:image/png;base64,AAAA',
+    };
+    const payload = { width: 720, preset: 'boxed',
+      cue: { text: '안녕하세요', emphasis: false },
+      hook: { text: 'Watch this!', style: 'banner' } };
+    const run = new Script('(' + CAPTION_CANVAS_SCRIPT_FOR_TEST + ')(' +
+      JSON.stringify(payload) + ')');
+    const result = run.runInNewContext({
+      document: { createElement: () => canvas },
+    });
+    expect(result).toBe('data:image/png;base64,AAAA');
+    expect(canvas.width).toBe(720);
+    expect(canvas.height).toBe(1280);
+    expect(drawn).toContain('안녕하세요');
+    expect(drawn).toContain('Watch this!');
+  });
 });

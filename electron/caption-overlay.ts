@@ -88,6 +88,9 @@ const PAINT_CANVAS = [
   '}',
 ].join('\n');
 
+/** Exposed for deterministic syntax/behavior tests without starting Electron. */
+export const CAPTION_CANVAS_SCRIPT_FOR_TEST = PAINT_CANVAS;
+
 /** Produces one timestamped PNG stream (not 30 simultaneous FFmpeg inputs). */
 export async function createCaptionOverlay(
   track: SubtitleTrack, seconds: number, width: number, directory: string,
