@@ -1,3 +1,4 @@
+import { externalToolEnv } from './tool-env.js';
 import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -24,7 +25,7 @@ export async function probeMedia(filePath: string): Promise<MediaProbe> {
       '-v', 'error', '-show_entries',
       'format=duration:stream=codec_type,width,height',
       '-of', 'json', filePath,
-    ], { windowsHide: true });
+    ], { windowsHide: true, env: externalToolEnv() });
     let output = '';
     let error = '';
     let settled = false;
