@@ -212,6 +212,7 @@ export function WizardPanel(props: Props) {
     <div className="wizard-footer">
       {currentIndex > 0 && <button type="button" disabled={disabled} onClick={() => navigate(WIZARD_STEPS[currentIndex - 1])}>← 이전</button>}
       <button type="button" className="wizard-advanced" disabled={disabled} onClick={props.onAdvanced}>조금 수정 · 고급 편집</button>
+      {step !== 'export' && <button type="button" title="AI 자동 제안은 다음 단계에서 추가됩니다." disabled>다시 생성 · 준비 중</button>}
       {step !== 'export' && <>
         {optional.has(step) && <button type="button" disabled={!canAccept || disabled}
           onClick={() => approve(true)}>건너뛰기</button>}
