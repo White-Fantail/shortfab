@@ -519,7 +519,7 @@ function App() {
   function importTranscriptCaptions() {
     const current = draftRef.current;
     const selected = current?.clips.find(item => item.id === current.selectedClipId);
-    if (!selected || !analysis || analysis.videoId !== youtubeVideoId(current?.youtubeUrl ?? '') ||
+    if (!selected || selected.source !== 'youtube' || !analysis || analysis.videoId !== youtubeVideoId(current?.youtubeUrl ?? '') ||
         !hasTranscriptForClip(analysis, selected.start, selected.end)) {
       setCaptionDraftMessage('현재 클립의 분석 대사가 없습니다. 02 클립 단계에서 분석하거나 Whisper 자막 생성을 사용하세요.');
       return;
