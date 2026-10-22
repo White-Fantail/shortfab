@@ -105,3 +105,14 @@ AG1 Wizard/StepRecord 마이그레이션 → AG2 STT/ClipRecommender → AG3 Lay
 전사 결과는 `userData/analysis` 내 모델 경로+파일 메타데이터 해시/언어/영상 ID/분석 버전이 다른 별도 JSON으로 저장한다. 현재 `ClipAnalysis`는 원본 길이, 실제 분석 범위, 전사 segments, 추천 candidates, 로컬 랭킹 근거, 모델 fingerprint를 포함한다. `recommendClips`는 여러 문장을 9~60초 후보로 결합하고 유효성/겹침/말 밀집/질문·반전 표현으로 우선순위를 매긴다. **LLM 기반 서술·관심도 예측은 현재 적용되지 않는다.** 최초 60분까지 전사하며 짧은 오디오/무음은 추천 개수를 강제하지 않는다. 명시적 새 분석 외엔 캐시된 실제 전사를 재사용한다.
 
 Clip 추천 후보는 프로젝트에 추가할 때에만 `ProjectClip`으로 바뀌고 `WizardRecord.clips[clipId].steps.clips.proposed` 메타데이터로 제안 버전을 기록한다. 기존 수동 수정/승인 필드는 재추천할 때 변경되지 않는다. 추천 카드/선택은 UI의 임시 상태, 재열기 시 추천 후보는 별도 캐시에서 로드한다. Clip 승인·출력은 기존 권리/게시 분리 정책을 그대로 지킨다.
+
+
+## AG3 선택형 Style Registry / 정지 프레임 시안 / FFmpeg
+
+`src/shared/layout-styles.ts`의 선언형 `LayoutStyle`(고정 ID + 0..100 focus)과 `LAYOUT_STYLES` 4종이 `ProjectClip.layout`에 기록된다. legacy clip은 중앙 크롭 50%로 정규화한다. 변경되면 `reconcileWizard`가 해당 클립의 layout/review/export만 재검토 처리한다.
+
+`StyleGallery`는 카드 스크롤/탭 선택을 담당한다. 원본 YouTube 썸네일은 참고 이미지이며, 필요 시 Electron `preview:frame` 요청을 통해 선택 클립 시점의 FFmpeg JPEG 프레임을 최대 900KB로 생성한다. 이미지/실제 프레임 캐시 상태는 renderer 임시 상태이고, 파일 절대 경로는 절대로 전달되지 않는다. 사용자가 취소할 수 있으며 해당 프레임은 **움직이는 동영상 합성 프리뷰가 아니다**.
+
+`RenderTask`는 저장된 `LayoutStyle`로 동일한 `layoutFilter`를 적용한다. 크롭은 `scale/crop/setsar/fps`, 원본 전체 보기는 `split + blur background + contain foreground + overlay` 복합 FFmpeg 필터 그래프로 렌더한다. ASS 자막은 단일/복합 필터 경로에 모두 합성된다. 선택한 layout의 시그니처를 artifact에 기록하여 `YouTubePublisher.start` privileged 검증에서 스타일 변경 후 오래된 MP4 게시를 막는다. AG4 자막은 별도 기본 4종 ASS 스타일을 동일 Gallery로 선택한다.
+
+**향후 확장:** 스타일 ID + 버전 + 렌더 실행 선언/검증 + 예제 + 회귀 픽스처 + 호환성 정책을 가진 정식 remote style catalog, 실제 짧은 proxy MP4 프리뷰, Trend Studio 원격 업데이트/롤백. 현재 고정 스타일 4종과 정적 카드만 실제 구현이다.
