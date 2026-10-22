@@ -11,6 +11,8 @@ import { buildAss } from './subtitles.js';
 import { selectCaptionRenderer } from './ffmpeg-ass.js';
 import { captionOverlayGraph, createCaptionOverlay } from './caption-overlay.js';
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
+import { validateNarration, type NarrationConfig } from '../src/shared/narration.js';
+import { narrationAudioFilter, synthesizeNarration } from './narration.js';
 
 const ffmpegBin = () => process.env.SHORTFAB_FFMPEG_PATH || 'ffmpeg';
 
@@ -22,9 +24,11 @@ function secondsFromTimestamp(value: string): number {
 export class RenderTask {
   private child: ChildProcessWithoutNullStreams | null = null;
   private cancelled = false;
+  private narrationAbort = new AbortController();
 
   cancel(): void {
     this.cancelled = true;
+    this.narrationAbort.abort();
     this.child?.kill('SIGTERM');
   }
 
@@ -35,23 +39,33 @@ export class RenderTask {
     progress: (value: RenderProgress) => void,
     subtitles: SubtitleTrack | null = null,
     layout: LayoutStyle | null = null,
+    narration: NarrationConfig | null = null,
   ): Promise<void> {
     if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
     const temporaryPath = join(dirname(outputPath), `.shortfab-${randomUUID()}.mp4`);
     const clipSeconds = request.end - request.start;
     let subtitleDir: string | null = null;
     const filter = layoutFilter(request.width, layout);
-    const hasCaptions = Boolean(subtitles?.cues.length || subtitles?.hook);
     try {
+      const voice = validateNarration(narration);
+      // Generate audio and exact sentence timings before choosing the subtitle renderer.
+      if (voice?.mode === 'tts') subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
+      const spoken = voice?.mode === 'tts' && subtitleDir
+        ? await synthesizeNarration(voice, clipSeconds, subtitleDir, this.narrationAbort.signal) : null;
+      const finalSubtitles: SubtitleTrack | null = spoken ? {
+        preset: subtitles?.preset ?? 'classic', cues: spoken.cues, hook: null,
+      } : subtitles;
+      const hasCaptions = Boolean(finalSubtitles?.cues.length || finalSubtitles?.hook);
       const selected = hasCaptions ? await selectCaptionRenderer(ffmpegBin()) :
         { binary: ffmpegBin(), mode: 'none' as const };
-      if (hasCaptions && subtitles) {
+      if (hasCaptions && finalSubtitles) {
+        subtitleDir ??= await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
         subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
         if (selected.mode === 'ass') {
           // Private ASCII basename via cwd avoids platform-specific filter path escaping.
-          await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
+          await writeFile(join(subtitleDir, 'captions.ass'), buildAss(finalSubtitles, clipSeconds), { mode: 0o600 });
         } else {
-          await createCaptionOverlay(subtitles, clipSeconds, request.width, subtitleDir,
+          await createCaptionOverlay(finalSubtitles, clipSeconds, request.width, subtitleDir,
             () => this.cancelled);
         }
       }
@@ -64,12 +78,24 @@ export class RenderTask {
             '-map', selected.mode === 'ass' ? '[outputv]' : '[v]']
           : ['-map', '0:v:0', '-vf', filter.graph +
             (selected.mode === 'ass' ? ',ass=filename=captions.ass' : '')];
+      const spokenIndex = selected.mode === 'overlay' ? 2 : 1;
+      const voiceAudio = spoken ? narrationAudioFilter((await probeMedia(sourcePath)).hasAudio, spokenIndex) : null;
+      const videoComplex = imageFilters[0] === '-filter_complex';
+      const videoMap = videoComplex ? imageFilters.slice(2) : imageFilters;
+      const combinedFilters = [
+        ...(videoComplex ? [imageFilters[1]] : []),
+        ...(voiceAudio?.graph ? [voiceAudio.graph] : []),
+      ];
       const args = [
         '-hide_banner', '-nostdin', '-loglevel', 'error',
         '-ss', request.start.toFixed(3), '-i', sourcePath,
         ...(selected.mode === 'overlay' ? ['-f', 'concat', '-safe', '0', '-i', 'captions.ffconcat'] : []),
+        ...(spoken ? ['-f', 'concat', '-safe', '0', '-i', 'narration.ffconcat'] : []),
         '-t', clipSeconds.toFixed(3),
-        ...imageFilters, '-map', '0:a:0?',
+        ...(videoComplex ? [] : videoMap),
+        ...(combinedFilters.length ? ['-filter_complex', combinedFilters.join(';')] : []),
+        ...(videoComplex ? videoMap : []),
+        '-map', voiceAudio?.map ?? '0:a:0?',
         '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
         '-movflags', '+faststart', '-progress', 'pipe:1',
