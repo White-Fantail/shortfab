@@ -41,6 +41,7 @@ function App() {
   const [analysisProgress, setAnalysisProgress] = useState<AnalyzeProgress | null>(null);
   const [analysisError, setAnalysisError] = useState('');
   const [selectedRecommendations, setSelectedRecommendations] = useState<string[]>([]);
+  const [recommendationPreview, setRecommendationPreview] = useState<ClipRecommendation | null>(null);
   const [loopClip, setLoopClip] = useState(false);
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudError, setCloudError] = useState('');
@@ -132,6 +133,7 @@ function App() {
     setAnalysisProgress(null);
     setAnalysisError('');
     setSelectedRecommendations([]);
+    setRecommendationPreview(null);
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
     setCloudError('');
     setPartnerError('');
@@ -458,6 +460,7 @@ function App() {
       setAnalysisProgress(null);
       setAnalysisError('');
       setSelectedRecommendations([]);
+      setRecommendationPreview(null);
       // Never carry declarations of one video's rights across to another video ID.
       setRightsForm({
         rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
@@ -488,6 +491,7 @@ function App() {
   }
 
   function updateClip(patch: Partial<ProjectClip>) {
+    setRecommendationPreview(null);
     changeDraft((current) => ({
       ...current,
       clips: current.clips.map((candidate) =>
@@ -619,6 +623,7 @@ function App() {
       if (projectRef.current?.id !== expectedId ||
           youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== videoId) return;
       setAnalysis(result.analysis);
+      setRecommendationPreview(null);
       setSelectedRecommendations(result.analysis.candidates[0] ? [result.analysis.candidates[0].id] : []);
       // Proposed metadata never replaces any accepted clip or user-edited title/markers.
       // This is a draft-only change, because the analysis job is already finished.
@@ -665,6 +670,7 @@ function App() {
       return { ...current, clips: [...current.clips, ...additions], selectedClipId: additions[0].id };
     });
     const first = selected[0];
+    setRecommendationPreview(null);
     if (first) moveTo(first.start);
     setStatus('선택한 추천 후보를 클립으로 추가했습니다. 구간을 조정하고 승인하세요.');
   }
@@ -672,6 +678,7 @@ function App() {
   function previewRecommendation(candidate: ClipRecommendation) {
     if (analysisBusy || busy || rendering) return;
     setSourceTab('youtube');
+    setRecommendationPreview(candidate);
     moveTo(candidate.start);
     youtubePlayer.current?.play();
   }
@@ -852,7 +859,7 @@ function App() {
           clip={clip ?? null} youtubeId={youtubeId} sourceDuration={draft.youtubeDuration}
           validClip={validClip} validationError={draftValidationError}
           ready={canRender} busy={busy} rendering={rendering} progress={progress}
-          analysis={analysis?.videoId === youtubeId ? analysis : null}
+          analysis={analysis?.videoId === youtubeId && analysis.language === sttLanguage ? analysis : null}
           analysisBusy={analysisBusy} analysisProgress={analysisProgress} analysisError={analysisError}
           analysisLanguage={sttLanguage} onAnalysisLanguage={setSttLanguage}
           onAnalyze={(mode, refresh) => void runAnalysis(mode, refresh)}
@@ -864,6 +871,7 @@ function App() {
           sttSetup={sttSetup} sttBusy={sttBusy} status={status} error={error}
           onUrl={setYoutubeUrl} onAddClip={addClipAtPlayhead}
           onSelectClip={(id, start) => {
+            setRecommendationPreview(null);
             changeDraft((current) => ({ ...current, selectedClipId: id }));
             moveTo(start);
           }}
@@ -1117,7 +1125,8 @@ function App() {
             <div className="portrait">
               {sourceTab === 'youtube' && youtubeId ? (
                 <YouTubePreview key={youtubeId} ref={youtubePlayer} videoId={youtubeId}
-                  start={clip?.start ?? null} end={clip?.end ?? null} loop={loopClip}
+                  start={wizardMode && recommendationPreview ? recommendationPreview.start : clip?.start ?? null}
+                  end={wizardMode && recommendationPreview ? recommendationPreview.end : clip?.end ?? null} loop={loopClip}
                   onTime={onPlaybackTime} onPlaying={setPlaying} onDuration={onYoutubeDuration} />
               ) : media && sourceTab === 'local' && sourceConnected ? (
                 <video key={`${project?.id}-${media.id}-${media.previewUrl}`} ref={videoRef}
