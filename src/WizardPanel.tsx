@@ -6,7 +6,8 @@ import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type Wiza
 import type { RenderProgress } from './shared/contracts';
 import type { ModelInstallProgress, SttLanguage, SttStatus } from './shared/stt';
 import { ModelInstallPanel } from './ModelInstallPanel';
-import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
+import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode, TranscriptSegment } from './shared/recommendations';
+import { repeatedSpeechWarnings, transcriptClock } from './shared/transcript-refinement';
 
 export const WIZARD_LABELS: Record<WizardStep, string> = {
   source: '원본', clips: '클립', layout: '화면', subtitles: '자막',
@@ -80,6 +81,8 @@ type Props = {
   onRemoveCaption: (id: string) => void;
   onAddCaption: () => void;
   onInstallModel: () => void;
+  onPreviewTranscript: (segment: TranscriptSegment) => void;
+  onSetTranscriptBoundary: (edge: 'start' | 'end', seconds: number) => void;
 };
 
 export function WizardProgress({ wizard, clipId, onGoTo, disabled }: {
@@ -112,6 +115,10 @@ export function WizardPanel(props: Props) {
   const clips = draft.clips.filter((item) => item.source === 'youtube');
   const disabled = busy || rendering || props.analysisBusy || props.frameBusy;
   const sourceValid = Boolean(youtubeId && sourceDuration !== null && sourceDuration > 0);
+  const transcriptRows = clip && props.analysis ? props.analysis.segments.filter((segment) =>
+    segment.end >= clip.start - 0.1 && segment.start <= clip.end + 0.1
+  ).slice(0, 24) : [];
+  const repeatedSpeech = repeatedSpeechWarnings(transcriptRows);
   const canAccept = step === 'source' ? sourceValid :
     Boolean(clip && validClip && !validationError);
   const navigate = (target: WizardStep) => props.onGoTo(target);
@@ -251,20 +258,45 @@ export function WizardPanel(props: Props) {
             onChange={(event) => props.onClip({ end: Number(event.target.value) })} /></label>
         </div>
         {props.analysis && <div className="wizard-transcript-editor">
-          <strong>실제 대사로 구간 다듬기</strong>
-          <p className="hint">문장을 선택해 클립 시작 또는 끝 시점을 맞춥니다. 나머지 구간과 자막은 유지됩니다.</p>
-          {props.analysis.segments.filter((segment) =>
-            segment.end >= clip.start - 0.1 && segment.start <= clip.end + 0.1
-          ).slice(0, 24).map((segment, index) => <div className="wizard-speech-row"
-            key={`${segment.start}-${index}`}>
-            <span><small>{time(segment.start)}</small> {segment.text}</span>
-            <div>
-              <button type="button" disabled={disabled || segment.start >= clip.end - 0.2}
-                onClick={() => props.onClip({ start: segment.start })}>IN</button>
-              <button type="button" disabled={disabled || segment.end <= clip.start + 0.2}
-                onClick={() => props.onClip({ end: segment.end })}>OUT</button>
-            </div>
-          </div>)}
+          <strong>음성 인식 결과로 시작·끝 맞추기</strong>
+          <p className="hint">Whisper가 추정한 대사와 시간입니다. <b>▶ 듣기</b>로 원본을 확인하고,
+            <b> IN 시작</b>은 해당 대사 시작 시각을, <b>OUT 끝</b>은 대사 종료 시각을 클립에 적용합니다.
+            표시된 글은 틀릴 수 있으며 기존 자막은 바뀌지 않습니다.</p>
+          <div className="wizard-transcript-current" aria-live="polite">
+            <span>현재 선택 클립</span>
+            <strong>{transcriptClock(clip.start)} → {transcriptClock(clip.end)}</strong>
+            <small>길이 {(clip.end - clip.start).toFixed(2)}초</small>
+          </div>
+          {repeatedSpeech.length > 0 && <p className="wizard-transcript-warning" role="status">
+            같은 문장이 {repeatedSpeech[0].count}회 연속 인식되었습니다.
+            실제 반복 발화일 수도 있고 음성 인식 오류일 수도 있으니 ▶ 듣기로 확인하세요.
+          </p>}
+          {!transcriptRows.length && <p className="hint">이 클립 근처에 인식된 대사가 없습니다.
+            위 시작·끝 시간을 직접 수정하거나 원본 영상을 재생해 확인하세요.</p>}
+          {transcriptRows.map((segment, index) => {
+            const atStart = Math.abs(clip.start - segment.start) < 0.05;
+            const atEnd = Math.abs(clip.end - segment.end) < 0.05;
+            return <div className="wizard-speech-row" key={`${segment.start}-${index}`}>
+              <div className="wizard-speech-content">
+                <small>{transcriptClock(segment.start)} – {transcriptClock(segment.end)}</small>
+                <span>{segment.text}</span>
+              </div>
+              <div className="wizard-speech-actions">
+                <button type="button" disabled={disabled} title="이 구간의 실제 원본 영상과 소리 확인"
+                  onClick={() => props.onPreviewTranscript(segment)}>▶ 듣기</button>
+                <button type="button" className={atStart ? 'marker-applied' : ''}
+                  aria-pressed={atStart} title="현재 클립 시작점을 이 대사 시작 시각으로 변경"
+                  disabled={disabled || segment.start >= clip.end - 0.2 + 1e-6}
+                  onClick={() => props.onSetTranscriptBoundary('start', segment.start)}>
+                  {atStart ? '✓ IN 시작' : 'IN 시작'}</button>
+                <button type="button" className={atEnd ? 'marker-applied' : ''}
+                  aria-pressed={atEnd} title="현재 클립 끝점을 이 대사 종료 시각으로 변경"
+                  disabled={disabled || segment.end <= clip.start + 0.2 - 1e-6}
+                  onClick={() => props.onSetTranscriptBoundary('end', segment.end)}>
+                  {atEnd ? '✓ OUT 끝' : 'OUT 끝'}</button>
+              </div>
+            </div>;
+          })}
         </div>}
       </>}
       {!clips.length && <p className="hint">아직 선택한 클립이 없습니다. 원본 재생 위치에서 클립을 만들어 주세요.</p>}

@@ -12,7 +12,7 @@ import { ModelInstallPanel } from './ModelInstallPanel';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 import { WizardPanel, WizardProgress } from './WizardPanel';
 import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
-import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
+import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode, TranscriptSegment } from './shared/recommendations';
 import { captionsFromAnalysis, hasTranscriptForClip, suggestSubtitleDecorations } from './shared/caption-suggestions';
 import { layoutSignature } from './shared/layout-styles';
 
@@ -752,6 +752,28 @@ function App() {
     youtubePlayer.current?.play();
   }
 
+  /** Audition the actual source in a short temporary interval, never mutate a clip. */
+  function previewTranscript(segment: TranscriptSegment) {
+    if (analysisBusy || busy || rendering || publishingBusy) return;
+    const duration = draftRef.current?.youtubeDuration;
+    if (!duration) return;
+    const start = Math.max(0, segment.start - 0.2);
+    const end = Math.min(duration, segment.end + 0.3);
+    setRecommendationPreview({
+      id: 'transcript-preview', start, end, title: '음성 인식 구간 확인',
+      transcript: segment.text, reason: '원본 확인', mode: 'balanced',
+    });
+    moveTo(start);
+    youtubePlayer.current?.play();
+  }
+
+  function setTranscriptBoundary(edge: 'start' | 'end', seconds: number) {
+    if (analysisBusy || busy || rendering || publishingBusy) return;
+    updateClip({ [edge]: seconds });
+    // Unlike the old IN/OUT buttons, show the newly applied point in the source player.
+    moveTo(seconds);
+  }
+
   function addClipAtPlayhead() {
     if (!draft || sourceDuration === null || sourceTab !== 'youtube' || !youtubeId ||
         busy || rendering || draft.clips.length >= 100) return;
@@ -976,6 +998,7 @@ function App() {
             moveTo(start);
           }}
           onClip={updateClip} onGoTo={wizardGoTo} onAccept={wizardAccept}
+          onPreviewTranscript={previewTranscript} onSetTranscriptBoundary={setTranscriptBoundary}
           onAdvanced={() => setWizardMode(false)}
           onRender={() => void renderClip()}
           onCancelRender={() => void window.shortfab?.cancelRender()}
