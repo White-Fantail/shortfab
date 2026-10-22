@@ -1,5 +1,7 @@
 # ShortFab 개발환경 · Phase 0 확인 · Phase 1 저장/복원 검증
 
+> **2026-10-22 제품 UX 전환:** 앞으로 신규 개발은 [AI Guided Creation v2.0 제품 기획](PRODUCT_BLUEPRINT.md)과 [AG0~AG8 로드맵](ROADMAP.md)을 따른다. URL→AI 클립 추천→자동 화면/자막/사운드/CTA를 매 단계 수정·승인하는 마법사가 목표이며, 이 문서의 수동 UI 실행법은 **현재까지 구현된 레거시 기능**의 사용법이다. 실제 AI 추천/마법사 완성은 아직 미구현. 기존 개인용 URL→수동 클립→MP4 성공은 유지하고 회귀 테스트한다.
+
 상태: 2026-10-22 **기존 Phase 0/Phase 1 첫 묶음 + 개인용 실제 YouTube URL→클립→MP4 익스포트 사용자 확인 완료**. CI 타입·린트·합성 MP4 3개 테스트·빌드 통과. 실클립 3개/오디오 QC/설치 패키징·실제 YouTube 게시 및 예외/경합 검증은 후속입니다. [수용 현황](IMPLEMENTATION_STATUS.md).
 
 ## 요구사항
