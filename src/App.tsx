@@ -9,6 +9,8 @@ import type { BindSourceRequest } from './shared/sources';
 import { SUBTITLE_PRESETS, type SubtitleTrack } from './shared/subtitles';
 import { MAX_STT_SECONDS, type SttLanguage, type SttStatus } from './shared/stt';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
+import { WizardPanel, WizardProgress } from './WizardPanel';
+import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
 
 type SourceTab = 'local' | 'youtube';
 type OutputTab = 'export' | 'publish';
@@ -23,7 +25,7 @@ function editorData(view: ProjectView): ProjectEdits {
   return {
     id: view.id, revision: view.revision, title: view.title,
     youtubeUrl: view.youtubeUrl, youtubeDuration: view.youtubeDuration, clips: view.clips,
-    selectedClipId: view.selectedClipId,
+    selectedClipId: view.selectedClipId, wizard: normalizeWizard(view.wizard, view.clips),
   };
 }
 
@@ -32,6 +34,7 @@ function App() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>('youtube');
+  const [wizardMode, setWizardMode] = useState(true);
   const [loopClip, setLoopClip] = useState(false);
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudError, setCloudError] = useState('');
@@ -76,6 +79,7 @@ function App() {
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   const clip = draft?.clips.find((item) => item.id === draft.selectedClipId && item.source === sourceTab);
+  const wizard = draft?.wizard ?? newWizard(draft?.clips ?? []);
   const visibleClips = draft?.clips.filter((item) => item.source === sourceTab) ?? [];
   const media = project?.media ?? null;
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
@@ -117,6 +121,7 @@ function App() {
     editVersion.current += 1;
     setProject(view);
     setDraft(edits);
+    setWizardMode(true);
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
     setCloudError('');
     setPartnerError('');
@@ -239,8 +244,9 @@ function App() {
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
     const old = draftRef.current;
     if (!old || publishingBusy) return;
-    const next = update(old);
-    if (next === old) return;
+    const candidate = update(old);
+    if (candidate === old) return;
+    const next = { ...candidate, wizard: reconcileWizard(candidate.wizard, old, candidate) };
     draftRef.current = next;
     dirtyRef.current = true;
     editVersion.current += 1;
@@ -560,6 +566,38 @@ function App() {
     }
   }
 
+  function addClipAtPlayhead() {
+    if (!draft || sourceDuration === null || sourceTab !== 'youtube' || !youtubeId ||
+        busy || rendering || draft.clips.length >= 100) return;
+    const from = Math.max(0, Math.min(playhead, sourceDuration - MIN_CLIP_SECONDS));
+    const end = Math.min(sourceDuration, from + 30);
+    if (end - from < MIN_CLIP_SECONDS - CLIP_TIME_EPSILON) return;
+    const id = crypto.randomUUID();
+    changeDraft((current) => ({
+      ...current, clips: [...current.clips, {
+        source: 'youtube', id, title: `클립 ${current.clips.length + 1}`,
+        start: Number(from.toFixed(2)), end: Number(end.toFixed(2)),
+        width: clip?.width ?? 720, subtitles: null,
+      }], selectedClipId: id,
+    }));
+  }
+
+  function wizardGoTo(step: WizardStep) {
+    changeDraft((current) => ({
+      ...current, wizard: { ...normalizeWizard(current.wizard, current.clips), activeStep: step },
+    }));
+  }
+
+  function wizardAccept(step: WizardStep, fields: WizardFields, skipped = false) {
+    changeDraft((current) => {
+      const existing = normalizeWizard(current.wizard, current.clips);
+      const updated = skipped ? skipStep(existing, current.selectedClipId, step)
+        : acceptStep(existing, current.selectedClipId, step, fields);
+      const next = WIZARD_STEPS[WIZARD_STEPS.indexOf(step) + 1] ?? step;
+      return { ...current, wizard: { ...updated, activeStep: next } };
+    });
+  }
+
   function addClip() {
     if (sourceDuration === null || !draft || busy || rendering ||
       (sourceTab === 'youtube' && !youtubeId) || (sourceTab === 'local' && !sourceConnected)) return;
@@ -654,7 +692,12 @@ function App() {
       if (result.status === 'completed') {
         await refreshPublishing();
         setPublishMessage('MP4가 준비되었습니다. YouTube 게시 설정을 확인해 주세요.');
-        setOutputTab('publish');
+        if (wizardMode) {
+          changeDraft((current) => ({
+            ...current, wizard: acceptStep(normalizeWizard(current.wizard, current.clips),
+              current.selectedClipId, 'export', { completed: true }),
+          }));
+        } else setOutputTab('publish');
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -684,8 +727,35 @@ function App() {
           ? (draftValidationError ? '수정 필요 · 저장 대기' : '변경 중 · 자동 저장') : '저장됨'}</span>
       </div>
 
-      <div className="workspace">
-        <aside className="sidebar">
+      <div className="creation-mode">
+        <button type="button" className={wizardMode ? 'active' : ''}
+          onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
+        <button type="button" className={!wizardMode ? 'active' : ''}
+          onClick={() => setWizardMode(false)}>고급 편집</button>
+        <span>{wizardMode ? 'AI 추천 기능을 단계별로 추가 중 · 현재 지원 기능을 정확히 표시합니다.' : '기존 수동 타임라인 · 자막 · 게시 설정'}</span>
+      </div>
+
+      {wizardMode && <WizardProgress wizard={wizard} clipId={draft?.selectedClipId ?? null}
+        disabled={busy || rendering} onGoTo={wizardGoTo} />}
+      <div className={wizardMode ? 'workspace wizard-workspace' : 'workspace'}>
+        {wizardMode && draft && <WizardPanel wizard={wizard} draft={draft}
+          clip={clip ?? null} youtubeId={youtubeId} sourceDuration={draft.youtubeDuration}
+          validClip={validClip} validationError={draftValidationError}
+          ready={canRender} busy={busy} rendering={rendering} progress={progress}
+          sttSetup={sttSetup} sttBusy={sttBusy} status={status} error={error}
+          onUrl={setYoutubeUrl} onAddClip={addClipAtPlayhead}
+          onSelectClip={(id, start) => {
+            changeDraft((current) => ({ ...current, selectedClipId: id }));
+            moveTo(start);
+          }}
+          onClip={updateClip} onGoTo={wizardGoTo} onAccept={wizardAccept}
+          onAdvanced={() => setWizardMode(false)}
+          onRender={() => void renderClip()}
+          onCancelRender={() => void window.shortfab?.cancelRender()}
+          onTranscribe={() => void generateSubtitles()}
+          onInstallModel={() => void installSttModel()} />}
+
+        <aside className="sidebar" hidden={wizardMode}>
           <p className="eyebrow">01 — PROJECT / SOURCE</p>
           <h2>영상 가져오기</h2>
           <label htmlFor="project-title">프로젝트 이름</label>
@@ -923,7 +993,7 @@ function App() {
         </aside>
 
         <main className="preview-area">
-          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? 'YouTube 원본 구간 탐색' : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'YOUTUBE · CLIP' : '9:16'}</span></div>
+          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? (wizardMode ? '원본 영상 · 합성 출력 프리뷰 아님' : 'YouTube 원본 구간 탐색') : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'YOUTUBE · CLIP' : '9:16'}</span></div>
           <div className="preview-stage">
             <div className="portrait">
               {sourceTab === 'youtube' && youtubeId ? (
@@ -978,7 +1048,7 @@ function App() {
           </div>
         </main>
 
-        <aside className="export-panel" aria-label="출력 및 게시 설정">
+        <aside className="export-panel" aria-label="출력 및 게시 설정" hidden={wizardMode}>
           <div className="output-tabs" role="tablist" aria-label="출력 작업"
             onKeyDown={(event) => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
