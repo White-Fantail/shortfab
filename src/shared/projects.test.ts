@@ -41,6 +41,18 @@ describe('versioned project edit schema', () => {
     expect(() => validateProjectEdits(valid, null)).toThrow('원본');
   });
 
+  it('accepts a 26:38 YouTube source with a 00:29–07:35 selection (regression)', () => {
+    const value = validateProjectEdits({
+      ...valid, youtubeUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+      youtubeDuration: 1598, clips: [{
+        ...valid.clips[0], source: 'youtube', title: '클립 1',
+        start: 29, end: 455, width: 720,
+      }],
+    }, null);
+    expect(value.clips).toHaveLength(1);
+    expect(value.clips[0].end - value.clips[0].start).toBe(426);
+  });
+
   it('saves YouTube-only preview ranges without a local source', () => {
     const youtube = validateProjectEdits({
       ...valid, youtubeDuration: 185, clips: [
