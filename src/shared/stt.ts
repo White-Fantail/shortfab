@@ -1,7 +1,7 @@
 import { validateSubtitleTrack, type SubtitleCue, type SubtitleTrack } from './subtitles.js';
 
 export type SttLanguage = 'auto' | 'ko' | 'en';
-export type SttPhase = 'download' | 'extract' | 'transcribe';
+export type SttPhase = 'model' | 'download' | 'extract' | 'transcribe';
 
 export interface SttProgress { phase: SttPhase; message: string }
 export interface SttStatus { engineAvailable: boolean; modelAvailable: boolean; modelName: string | null }

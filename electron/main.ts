@@ -8,7 +8,7 @@ import { RenderTask } from './render.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
 import { SttTask } from './stt.js';
-import { modelValid, setSttModelPath, sttModelPath, sttStatus } from './stt-model.js';
+import { installDefaultSttModel, modelValid, setSttModelPath, sttModelPath, sttStatus } from './stt-model.js';
 import { MAX_STT_SECONDS, validateSttRequest, type SttProgress, type SttResult } from '../src/shared/stt.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 import { validatePublishDraft } from '../src/shared/publishing.js';
@@ -24,6 +24,8 @@ let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
 let sttBusy = false;
+let sttModelBusy = false;
+let sttModelAbort: AbortController | null = null;
 let sttCancelled = false;
 let sttTask: SttTask | null = null;
 let sttPersonalTask: PersonalVideoTask | null = null;
@@ -36,7 +38,7 @@ const publisher = new YouTubePublisher((job) => {
 });
 
 function requireIdle(): void {
-  if (renderBusy || sourceBusy || sttBusy || publisher.isBusy) throw new Error('진행 중인 원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
+  if (renderBusy || sourceBusy || sttBusy || sttModelBusy || publisher.isBusy) throw new Error('진행 중인 모델 설치·원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -192,6 +194,25 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('stt:status', () => sttStatus());
+  ipcMain.handle('stt:installModel', async () => {
+    requireIdle();
+    sttModelBusy = true;
+    const controller = new AbortController();
+    sttModelAbort = controller;
+    try {
+      await installDefaultSttModel(controller.signal, (percent) =>
+        reportStt({ phase: 'model', message: '다국어 Whisper 모델 다운로드 ' + percent + '% (약 148MB)' }));
+      return sttStatus();
+    } catch (cause) {
+      if (controller.signal.aborted) return sttStatus();
+      throw cause;
+    } finally {
+      sttModelAbort = null;
+      sttModelBusy = false;
+    }
+  });
+  ipcMain.handle('stt:cancelModel', () => { sttModelAbort?.abort(); });
+
   ipcMain.handle('stt:chooseModel', async () => {
     requireIdle();
     const options: OpenDialogOptions = {
@@ -276,7 +297,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy || sourceBusy || sttBusy || publisher.isBusy) throw new Error('이미 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
+    if (renderBusy || sourceBusy || sttBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
     const activeClip = projects.activeClip;
