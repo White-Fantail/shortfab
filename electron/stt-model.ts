@@ -6,6 +6,7 @@ import { app } from 'electron';
 import { externalToolEnv } from './tool-env.js';
 import type { SttStatus } from '../src/shared/stt.js';
 import { DEFAULT_WHISPER_MODEL, downloadPinnedModel } from './stt-model-download.js';
+import type { ModelInstallProgress } from '../src/shared/stt.js';
 
 const engineBinary = () => process.env.SHORTFAB_WHISPER_PATH?.trim() || 'whisper-cli';
 const configPath = () => join(app.getPath('userData'), 'settings', 'stt.json');
@@ -40,11 +41,15 @@ export async function setSttModelPath(path: string): Promise<void> {
 }
 
 /** The model is downloaded only after an explicit user click. Audio is never uploaded. */
-export async function installDefaultSttModel(signal: AbortSignal, progress: (percent: number) => void): Promise<void> {
+export async function installDefaultSttModel(signal: AbortSignal, progress: (status: ModelInstallProgress) => void): Promise<void> {
   const destination = join(app.getPath('userData'), 'models', DEFAULT_WHISPER_MODEL.filename);
-  await downloadPinnedModel({ destination, signal, onProgress: progress });
+  await downloadPinnedModel({ destination, signal, onStatus: progress });
   if (signal.aborted) throw new Error('모델 다운로드가 취소되었습니다.');
+  progress({ stage: 'registering', percent: 99, receivedBytes: DEFAULT_WHISPER_MODEL.bytes,
+    totalBytes: DEFAULT_WHISPER_MODEL.bytes, message: '검증된 모델 경로를 저장하는 중…' });
   await setSttModelPath(destination);
+  progress({ stage: 'complete', percent: 100, receivedBytes: DEFAULT_WHISPER_MODEL.bytes,
+    totalBytes: DEFAULT_WHISPER_MODEL.bytes, message: '기본 다국어 모델 설치 완료' });
 }
 
 /** Installation probe: no model download, audio uploads or arbitrary CLI flags. */

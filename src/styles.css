@@ -418,3 +418,27 @@
 .wizard-caption-hook > label:not(.wizard-hook-switch) {display:block;margin:9px 0 6px;}
 .wizard-caption-hook > input {font-size:12px;line-height:1.5;}
 @media(max-width:650px) { .wizard-caption-edit,.wizard-caption-hook { padding:12px; } }
+
+
+/* Shared Whisper model installer feedback (AG2 / AG4 / Advanced Edit). */
+.model-install-wrapper { display:grid; gap:10px; min-width:0; }
+.model-install-wrapper > button { margin:0; }
+.model-install-status { padding:13px; background:#222331; border:1px solid #48465d; border-radius:10px; }
+.model-install-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.model-install-header strong { font-size:12px; line-height:1.5; color:#e8e0fc; font-weight:650; }
+.model-install-header b { color:#d5baff; font-size:14px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.model-install-status.failed { border-color:#915364; }
+.model-install-status.failed .model-install-header strong { color:#ffb7bf; }
+.model-install-status.complete { border-color:#476e5b; }
+.model-install-status.complete .model-install-header strong { color:#a5e2b8; }
+.model-install-track { margin:11px 0 8px; height:8px; border-radius:6px; overflow:hidden; background:#343747; position:relative; }
+.model-install-track > div { height:100%; background:#b18afa; transition:width .2s; border-radius:6px; }
+.model-install-track.indeterminate::after { content:''; position:absolute; inset:0; width:36%; background:linear-gradient(90deg,transparent,#bd9df5a6,transparent); animation:model-wait 1.6s ease-in-out infinite; }
+@keyframes model-wait { from{ transform:translateX(-120%); } to{ transform:translateX(300%); } }
+@media (prefers-reduced-motion:reduce) { .model-install-track.indeterminate::after { animation:none; width:100%; opacity:.3; } }
+.model-install-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin:0; color:#b6b7c9; font-size:11px; font-variant-numeric:tabular-nums; }
+.model-install-substatus { font-size:11px; line-height:1.55; color:#c3bace; margin:10px 0 0; overflow-wrap:anywhere; }
+.model-install-status .cancel { margin:11px 0 0; }
+.model-activity-dot { display:inline-block; vertical-align:middle; width:9px; height:9px; border-radius:50%; background:#b996ff; margin-right:6px; box-shadow:0 0 0 3px #a585f326; animation:model-pulse 1.2s ease-in-out infinite; }
+@keyframes model-pulse { 50% { opacity:.35; } }
+@media (prefers-reduced-motion:reduce) { .model-activity-dot { animation:none; } }

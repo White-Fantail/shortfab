@@ -15,18 +15,22 @@ describe('pinned Whisper model installer', () => {
       const path = join(dir, 'model.bin');
       let calls = 0;
       const progress: number[] = [];
+      const stages: string[] = [];
       const fetcher = (async () => {
         calls++;
         return new Response(payload, { headers: { 'content-length': String(payload.length) } });
       }) as typeof fetch;
       const args = { destination: path, source: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
         expectedBytes: payload.length, expectedSha256: sha, fetcher,
-        onProgress: (value: number) => progress.push(value) };
+        onProgress: (value: number) => progress.push(value),
+        onStatus: (value: { stage: string }) => stages.push(value.stage) };
       await downloadPinnedModel(args);
       await downloadPinnedModel(args);
       expect(calls).toBe(1);
       expect(await readFile(path)).toEqual(payload);
       expect(progress.at(-1)).toBe(100);
+      expect(stages).toEqual(['checking', 'connecting', 'downloading',
+        'downloading', 'verifying', 'registering', 'checking', 'registering']);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
   it('follows regional official Hugging Face CDN redirects and verifies the final bytes', async () => {
@@ -36,9 +40,11 @@ describe('pinned Whisper model installer', () => {
       const cdn1 = 'https://cdn-lfs-us-1.hf.co/object';
       const cdn2 = 'https://us.aws.cdn.hf.co/object';
       const requested: string[] = [];
+      const events: { stage: string; percent: number; receivedBytes: number }[] = [];
       await downloadPinnedModel({
         destination: join(dir, 'model.bin'),
         expectedBytes: payload.length, expectedSha256: sha,
+        onStatus: status => events.push(status),
         fetcher: (async (url: string) => {
           requested.push(url);
           if (url === original) return new Response(null, {
@@ -51,6 +57,9 @@ describe('pinned Whisper model installer', () => {
         }) as typeof fetch,
       });
       expect(requested).toEqual([original, cdn1, cdn2]);
+      expect(events.filter(event => event.stage === 'connecting')).toHaveLength(3);
+      expect(events.some(event => event.stage === 'verifying' && event.percent === 99)).toBe(true);
+      expect(events.at(-1)?.stage).toBe('registering');
       expect(await readFile(join(dir, 'model.bin'))).toEqual(payload);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });

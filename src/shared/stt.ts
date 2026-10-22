@@ -3,7 +3,18 @@ import { validateSubtitleTrack, type SubtitleCue, type SubtitleTrack } from './s
 export type SttLanguage = 'auto' | 'ko' | 'en';
 export type SttPhase = 'model' | 'download' | 'extract' | 'transcribe';
 
-export interface SttProgress { phase: SttPhase; message: string }
+export interface SttProgress { phase: SttPhase; message: string; model?: ModelInstallProgress }
+export type ModelInstallStage =
+  | 'checking' | 'connecting' | 'downloading' | 'verifying'
+  | 'registering' | 'complete' | 'cancelled' | 'failed';
+export interface ModelInstallProgress {
+  stage: ModelInstallStage;
+  percent: number;
+  receivedBytes: number;
+  totalBytes: number;
+  message: string;
+}
+
 export interface SttStatus { engineAvailable: boolean; modelAvailable: boolean; modelName: string | null }
 export interface SttRequest { sourceId: string; language: SttLanguage }
 export type SttResult = { status: 'completed'; track: SubtitleTrack } | { status: 'cancelled' };

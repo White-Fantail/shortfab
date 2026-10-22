@@ -256,10 +256,17 @@ app.whenReady().then(() => {
     const controller = new AbortController();
     sttModelAbort = controller;
     try {
-      await installDefaultSttModel(controller.signal, (percent) =>
-        reportStt({ phase: 'model', message: '다국어 Whisper 모델 다운로드 ' + percent + '% (약 148MB)' }));
+      await installDefaultSttModel(controller.signal, (model) =>
+        reportStt({ phase: 'model', message: model.message, model }));
       return sttStatus();
     } catch (cause) {
+      const model = {
+        stage: controller.signal.aborted ? 'cancelled' : 'failed',
+        percent: 0, receivedBytes: 0, totalBytes: 147_951_465,
+        message: controller.signal.aborted ? '모델 다운로드 취소 완료' :
+          cause instanceof Error ? cause.message : '모델 설치 중 오류가 발생했습니다.',
+      } as const;
+      reportStt({ phase: 'model', message: model.message, model });
       if (controller.signal.aborted) return sttStatus();
       throw cause;
     } finally {

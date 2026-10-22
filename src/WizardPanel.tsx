@@ -4,7 +4,8 @@ import { layoutDefault, validateLayout, type LayoutStyleId } from './shared/layo
 import type { SubtitleCue, SubtitlePreset, SubtitleTrack } from './shared/subtitles';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
-import type { SttLanguage, SttStatus } from './shared/stt';
+import type { ModelInstallProgress, SttLanguage, SttStatus } from './shared/stt';
+import { ModelInstallPanel } from './ModelInstallPanel';
 import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
 
 export const WIZARD_LABELS: Record<WizardStep, string> = {
@@ -52,6 +53,11 @@ type Props = {
   progress: RenderProgress;
   sttSetup: SttStatus | null;
   sttBusy: boolean;
+  modelInstalling: boolean;
+  modelProgress: ModelInstallProgress | null;
+  modelStartedAt: number;
+  modelLastByteAt: number;
+  onCancelModel: () => void;
   status: string;
   error: string;
   onUrl: (value: string) => void;
@@ -176,8 +182,11 @@ export function WizardPanel(props: Props) {
         </>}
         {(!sttSetup?.engineAvailable || !sttSetup?.modelAvailable) && <>
           <p className="hint">로컬 Whisper.cpp와 다국어 GGML 모델이 필요합니다. Mac: <code>brew install whisper.cpp ffmpeg yt-dlp</code>. 영상/대사 내용은 외부 AI 서비스로 전송하지 않습니다.</p>
-          {!sttSetup?.modelAvailable && <button type="button" className="secondary full" disabled={disabled}
-            onClick={props.onInstallModel}>기본 Whisper 다국어 모델 설치</button>}
+          <ModelInstallPanel installed={!!sttSetup?.modelAvailable}
+            installing={props.modelInstalling} progress={props.modelProgress}
+            startedAt={props.modelStartedAt} lastByteAt={props.modelLastByteAt}
+            disabled={disabled} onInstall={props.onInstallModel}
+            onCancel={props.onCancelModel} />
         </>}
         {props.analysisError && <p className="warning" role="alert">{props.analysisError}</p>}
       </div>
@@ -317,8 +326,11 @@ export function WizardPanel(props: Props) {
           onClick={props.onTranscribe}>{sttBusy ? '음성 인식 중…' : 'Whisper로 현재 클립 새로 전사'}</button>
         {sttBusy && <button type="button" className="cancel full"
           onClick={() => void window.shortfab?.cancelTranscription()}>음성 인식 취소</button>}
-        {!sttSetup?.modelAvailable && <button type="button" className="secondary full"
-          disabled={disabled} onClick={props.onInstallModel}>기본 다국어 Whisper 모델 설치</button>}
+        <ModelInstallPanel installed={!!sttSetup?.modelAvailable}
+          installing={props.modelInstalling} progress={props.modelProgress}
+          startedAt={props.modelStartedAt} lastByteAt={props.modelLastByteAt}
+          disabled={disabled} onInstall={props.onInstallModel}
+          onCancel={props.onCancelModel} />
         {props.captionDraftMessage && <p role="status" className="hint">{props.captionDraftMessage}</p>}
         {props.sttMessage && <p role="status" className="hint">{props.sttMessage}</p>}
       </div>

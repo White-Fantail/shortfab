@@ -7,7 +7,8 @@ import {
 } from './shared/projects';
 import type { BindSourceRequest } from './shared/sources';
 import { SUBTITLE_PRESETS, type SubtitleTrack } from './shared/subtitles';
-import { MAX_STT_SECONDS, type SttLanguage, type SttStatus } from './shared/stt';
+import { MAX_STT_SECONDS, type ModelInstallProgress, type SttLanguage, type SttStatus } from './shared/stt';
+import { ModelInstallPanel } from './ModelInstallPanel';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 import { WizardPanel, WizardProgress } from './WizardPanel';
 import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
@@ -68,6 +69,10 @@ function App() {
   const [rendering, setRendering] = useState(false);
   const [sttBusy, setSttBusy] = useState(false);
   const [modelInstalling, setModelInstalling] = useState(false);
+  const [modelProgress, setModelProgress] = useState<ModelInstallProgress | null>(null);
+  const [modelStartedAt, setModelStartedAt] = useState(0);
+  const [modelLastByteAt, setModelLastByteAt] = useState(0);
+  const modelReceivedRef = useRef(0);
   const [sttLanguage, setSttLanguage] = useState<SttLanguage>('auto');
   const [sttSetup, setSttSetup] = useState<SttStatus | null>(null);
   const [sttMessage, setSttMessage] = useState('');
@@ -234,7 +239,14 @@ function App() {
       if (live) setAnalysisProgress(event);
     });
     const unsubscribeStt = window.shortfab?.onSttProgress((event) => {
-      if (live) setSttMessage(event.message);
+      if (!live) return;
+      if (event.phase === 'model' && event.model) {
+        setModelProgress(event.model);
+        if (event.model.stage === 'downloading' && event.model.receivedBytes > modelReceivedRef.current) {
+          modelReceivedRef.current = event.model.receivedBytes;
+          setModelLastByteAt(Date.now());
+        }
+      } else if (event.phase !== 'model') setSttMessage(event.message);
     });
     if (window.shortfab) {
       void window.shortfab.sttStatus()
@@ -581,15 +593,27 @@ function App() {
     if (!window.shortfab || busy || rendering || publishingBusy || sttBusy || modelInstalling) return;
     setModelInstalling(true);
     setBusy(true);
-    setSttMessage('기본 다국어 AI 모델을 안전하게 내려받는 중…');
+    const startedAt = Date.now();
+    modelReceivedRef.current = 0;
+    setModelStartedAt(startedAt);
+    setModelLastByteAt(startedAt);
+    setModelProgress({ stage: 'checking', percent: 0, receivedBytes: 0,
+      totalBytes: 147_951_465, message: '기존 모델 확인 및 설치 준비 중…' });
     try {
-      const status = await window.shortfab.installSttModel();
-      setSttSetup(status);
-      setSttMessage(status.modelAvailable
-        ? '기본 다국어 AI 모델 설치 완료. 언어를 선택하고 자동 자막 생성을 누르세요.'
-        : '모델 다운로드가 취소되었습니다. 기존 자막은 유지됩니다.');
+      const result = await window.shortfab.installSttModel();
+      setSttSetup(result);
+      setModelProgress((previous) => ({
+        stage: result.modelAvailable ? 'complete' : 'cancelled',
+        percent: result.modelAvailable ? 100 : previous?.percent ?? 0,
+        receivedBytes: result.modelAvailable ? 147_951_465 : previous?.receivedBytes ?? 0,
+        totalBytes: 147_951_465,
+        message: result.modelAvailable ? '기본 다국어 모델 설치 완료. 음성 분석을 시작할 수 있습니다.' :
+          '모델 설치가 취소되었습니다. 다시 설치할 수 있습니다.',
+      }));
     } catch (cause) {
-      setSttMessage(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setModelProgress((previous) => ({ stage: 'failed', percent: previous?.percent ?? 0,
+        receivedBytes: previous?.receivedBytes ?? 0, totalBytes: 147_951_465, message }));
     } finally {
       setModelInstalling(false);
       setBusy(false);
@@ -940,7 +964,11 @@ function App() {
           onToggleRecommendation={(id) => setSelectedRecommendations((ids) =>
             ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id])}
           onPreviewRecommendation={previewRecommendation} onAddRecommendations={addRecommendations}
-          sttSetup={sttSetup} sttBusy={sttBusy} status={status} error={error}
+          sttSetup={sttSetup} sttBusy={sttBusy}
+          modelInstalling={modelInstalling} modelProgress={modelProgress}
+          modelStartedAt={modelStartedAt} modelLastByteAt={modelLastByteAt}
+          onCancelModel={() => void window.shortfab?.cancelSttModel()}
+          status={status} error={error}
           onUrl={setYoutubeUrl} onAddClip={addClipAtPlayhead}
           onSelectClip={(id, start) => {
             setRecommendationPreview(null);
@@ -1123,13 +1151,12 @@ function App() {
                   <span>{sttSetup?.engineAvailable ? '● whisper-cli 설치됨' : '○ whisper-cli 설치 필요'}</span>
                   <span>{sttSetup?.modelAvailable ? `● 모델: ${sttSetup.modelName}` : '○ GGML 모델(.bin) 선택 필요'}</span>
                 </div>
-                {!sttSetup?.modelAvailable && <button className="primary full" type="button"
+                <ModelInstallPanel installed={!!sttSetup?.modelAvailable}
+                  installing={modelInstalling} progress={modelProgress}
+                  startedAt={modelStartedAt} lastByteAt={modelLastByteAt}
                   disabled={busy || rendering || publishingBusy || sttBusy}
-                  onClick={() => void installSttModel()}>
-                  {modelInstalling ? '다국어 모델 다운로드 중…' : '기본 한국어·영어 모델 설치 (약 148MB)'}
-                </button>}
-                {modelInstalling && <button className="cancel full" type="button"
-                  onClick={() => void window.shortfab?.cancelSttModel()}>모델 다운로드 취소</button>}
+                  onInstall={() => void installSttModel()}
+                  onCancel={() => void window.shortfab?.cancelSttModel()} />
                 <button className="secondary full" type="button" disabled={busy || rendering}
                   onClick={() => void chooseSttModel()}>다른 GGML 모델 파일 선택…</button>
                 <button className="primary full" type="button"
