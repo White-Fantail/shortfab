@@ -4,6 +4,7 @@ import type { BindSourceRequest } from './shared/sources';
 import type { ApprovedCloudSourceRequest } from './shared/cloud';
 import type { PublishDraft, PublishJobView, PublishOverview, PublishProgress } from './shared/publishing';
 import type { SttProgress, SttRequest, SttResult, SttStatus } from './shared/stt';
+import type { AnalyzeProgress, AnalyzeRequest, AnalyzeResult, ClipAnalysis } from './shared/recommendations';
 
 declare global {
   interface Window {
@@ -21,6 +22,10 @@ declare global {
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
       personalToolAvailable(): Promise<boolean>;
+      startAnalysis(request: AnalyzeRequest): Promise<AnalyzeResult>;
+      cancelAnalysis(): Promise<void>;
+      cachedAnalysis(videoId: string, duration: number, language: AnalyzeRequest['language']): Promise<ClipAnalysis | null>;
+      onAnalysisProgress(callback: (progress: AnalyzeProgress) => void): () => void;
       sttStatus(): Promise<SttStatus>;
       chooseSttModel(): Promise<SttStatus>;
       installSttModel(): Promise<SttStatus>;
