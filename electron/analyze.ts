@@ -40,6 +40,7 @@ export class AnalyzeVideoTask {
   private acquire: PersonalVideoTask | null = null;
   private stt: SttTask | null = null;
 
+  get isCancelled(): boolean { return this.cancelled; }
   cancel(): void {
     this.cancelled = true;
     this.acquire?.cancel();
