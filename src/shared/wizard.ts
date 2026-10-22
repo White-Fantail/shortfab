@@ -146,7 +146,7 @@ function staleSteps(wizard: WizardRecord, clipId: string, names: Exclude<WizardS
     return setStepPlan(next, clipId, name, stale(current));
   }, wizard);
 }
-type WizardEditable = { youtubeUrl: string; youtubeDuration: number | null; clips: ProjectClip[] };
+type WizardEditable = { youtubeUrl: string; youtubeDuration: number | null; clips: ProjectClip[]; shortClipIds?: string[] };
 /** Called for EVERY editor change, including Advanced Edit and STT results. */
 export function reconcileWizard(wizard: WizardRecord | undefined, before: WizardEditable, after: WizardEditable): WizardRecord {
   let next = normalizeWizard(wizard, after.clips);
@@ -169,6 +169,20 @@ export function reconcileWizard(wizard: WizardRecord | undefined, before: Wizard
     else if (narrationChanged) next = staleSteps(next, clip.id, ['audio', 'subtitles', 'review', 'export']);
     else if (captionsChanged) next = staleSteps(next, clip.id, ['subtitles', 'review', 'export']);
     else if (nameChanged) next = staleSteps(next, clip.id, ['review', 'export']);
+  }
+  // Editing any piece of an assembled short, or reordering it, makes its
+  // aggregate review/export stale. Unrelated library clips remain untouched.
+  if (before.shortClipIds || after.shortClipIds) {
+    const beforeIds = before.shortClipIds ?? [];
+    const afterIds = after.shortClipIds ?? [];
+    const orderChanged = JSON.stringify(beforeIds) !== JSON.stringify(afterIds);
+    const affected = orderChanged || afterIds.some((id) =>
+      JSON.stringify(before.clips.find((clip) => clip.id === id) ?? null) !==
+      JSON.stringify(after.clips.find((clip) => clip.id === id) ?? null));
+    if (affected) for (const id of afterIds) {
+      next = staleSteps(next, id, orderChanged
+        ? ['clips', 'review', 'export'] : ['review', 'export']);
+    }
   }
   return next;
 }
