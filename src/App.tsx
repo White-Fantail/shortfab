@@ -29,7 +29,7 @@ function editorData(view: ProjectView): ProjectEdits {
   return {
     id: view.id, revision: view.revision, title: view.title,
     youtubeUrl: view.youtubeUrl, youtubeDuration: view.youtubeDuration, clips: view.clips,
-    selectedClipId: view.selectedClipId, wizard: normalizeWizard(view.wizard, view.clips),
+    shortClipIds: view.shortClipIds, selectedClipId: view.selectedClipId, wizard: normalizeWizard(view.wizard, view.clips),
   };
 }
 
@@ -100,6 +100,8 @@ function App() {
   const wizard = draft?.wizard ?? newWizard(draft?.clips ?? []);
   const frameKey = clip ? `${clip.id}|${clip.start}|${clip.end}|${youtubeVideoId(draft?.youtubeUrl ?? '')}` : '';
   const visibleClips = draft?.clips.filter((item) => item.source === sourceTab) ?? [];
+  const shortParts = (draft?.shortClipIds ?? []).map((id) => draft?.clips.find((item) => item.id === id)).filter((item): item is ProjectClip => !!item);
+  const renderTarget = wizardMode ? shortParts[0] ?? null : clip ?? null;
   const media = project?.media ?? null;
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
   const sourceConnected = project?.sourceStatus === 'connected';
@@ -115,11 +117,15 @@ function App() {
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
   // A public YouTube clip can be fetched on demand for personal export.
-  const canRender = validClip && !frameBusy && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && !analysisBusy && (
-    (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
-    (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
-  );
-  const publishReady = publishing?.artifact?.projectId === project?.id &&
+  const canRender = Boolean(renderTarget && !frameBusy && !draftValidationError && !rendering &&
+    !busy && !publishingBusy && !sttBusy && !analysisBusy &&
+    (!wizardMode || (shortParts.length > 0 && shortParts.every((part) =>
+      part.source === renderTarget.source && Number.isFinite(part.start) && Number.isFinite(part.end) &&
+      part.start >= 0 && part.end - part.start >= MIN_CLIP_SECONDS - CLIP_TIME_EPSILON &&
+      part.end <= (part.source === 'youtube' ? draft?.youtubeDuration ?? 0 : media?.duration ?? 0) + 0.02))) &&
+    (renderTarget.source === 'local' ? sourceConnected && (!wizardMode || sourceTab === 'local') :
+      !!youtubeId && (wizardMode || sourceTab === 'youtube')));
+  const publishReady = (!wizardMode || shortParts.length <= 1) && publishing?.artifact?.projectId === project?.id &&
     publishing?.artifact?.clipId === clip?.id &&
     publishing?.artifact?.start === clip?.start &&
     publishing?.artifact?.end === clip?.end &&
@@ -499,6 +505,7 @@ function App() {
       const clips = current.clips.filter((item) =>
         item.source !== 'youtube' && (item.source !== 'local' || !!projectRef.current?.media));
       return { ...current, youtubeUrl: value, youtubeDuration: null, clips,
+        shortClipIds: current.shortClipIds.filter((id) => clips.some((item) => item.id === id)),
         selectedClipId: clips.find((item) => item.id === current.selectedClipId)?.id ?? clips[0]?.id ?? null };
     });
     setPlayhead(0);
@@ -736,7 +743,9 @@ function App() {
           analyzer: analysis.engineVersion, mode: analysis.mode,
         });
       }
-      return { ...current, clips, wizard: proposed, selectedClipId: additions[0].id };
+      return { ...current, clips, wizard: proposed, selectedClipId: additions[0].id,
+        shortClipIds: [...current.shortClipIds.filter((id) => clips.some((item) => item.id === id && item.source === 'youtube')),
+          ...additions.map((item) => item.id)] };
     });
     const first = selected[0];
     setRecommendationPreview(null);
@@ -787,7 +796,31 @@ function App() {
         start: Number(from.toFixed(2)), end: Number(end.toFixed(2)),
         width: clip?.width ?? 720, subtitles: null,
       }], selectedClipId: id,
+      shortClipIds: [...current.shortClipIds.filter((clipId) =>
+        current.clips.some((item) => item.id === clipId && item.source === 'youtube')), id],
     }));
+  }
+
+  function editShortComposition(id: string, action: 'toggle' | 'up' | 'down') {
+    changeDraft((current) => {
+      const ids = [...current.shortClipIds];
+      const index = ids.indexOf(id);
+      const part = current.clips.find((item) => item.id === id);
+      if (!part) return current;
+      if (action === 'toggle') {
+        if (index >= 0) ids.splice(index, 1);
+        else {
+          const first = current.clips.find((item) => item.id === ids[0]);
+          if (first && first.source !== part.source) return current;
+          ids.push(id);
+        }
+      } else {
+        const other = index + (action === 'up' ? -1 : 1);
+        if (index < 0 || other < 0 || other >= ids.length) return current;
+        [ids[index], ids[other]] = [ids[other], ids[index]];
+      }
+      return { ...current, shortClipIds: ids };
+    });
   }
 
   function wizardGoTo(step: WizardStep) {
@@ -818,6 +851,8 @@ function App() {
     };
     changeDraft((current) => ({
       ...current, clips: [...current.clips, newClip], selectedClipId: newClip.id,
+      shortClipIds: current.shortClipIds.length && current.clips.find((item) => item.id === current.shortClipIds[0])?.source !== newClip.source
+        ? current.shortClipIds : [...current.shortClipIds, newClip.id],
     }));
     setPlayhead(from);
   }
@@ -828,6 +863,7 @@ function App() {
       const remaining = current.clips.filter((item) => item.id !== current.selectedClipId);
       return {
         ...current, clips: remaining,
+        shortClipIds: current.shortClipIds.filter((id) => id !== current.selectedClipId),
         selectedClipId: remaining[0]?.id ?? null,
       };
     });
@@ -905,10 +941,10 @@ function App() {
   }
 
   async function renderClip() {
-    if (!canRender || !clip || !window.shortfab) return;
-    const renderAssetId = clip.source === 'youtube'
+    if (!canRender || !renderTarget || !window.shortfab) return;
+    const renderAssetId = renderTarget.source === 'youtube'
       ? linkedAsset?.sourceAssetId ?? (youtubeId ? 'youtube:' + youtubeId : null) : media?.id;
-    const offset = clip.source === 'youtube' ? linkedAsset?.startOffsetSeconds ?? 0 : 0;
+    const offset = renderTarget.source === 'youtube' ? linkedAsset?.startOffsetSeconds ?? 0 : 0;
     if (!renderAssetId) return;
     setError('');
     setRendering(true);
@@ -917,12 +953,15 @@ function App() {
     try {
       await flushEdits();
       const result = await window.shortfab.startRender({
-        sourceId: renderAssetId, start: clip.start + offset, end: clip.end + offset, width: clip.width,
+        sourceId: renderAssetId, start: renderTarget.start + offset, end: renderTarget.end + offset, width: renderTarget.width,
+        ...(wizardMode ? { compositionClipIds: shortParts.map((part) => part.id) } : {}),
       });
       setStatus(result.status === 'completed' ? `완료: ${result.outputPath}` : '내보내기가 취소되었습니다.');
       if (result.status === 'completed') {
         await refreshPublishing();
-        setPublishMessage('MP4가 준비되었습니다. YouTube 게시 설정을 확인해 주세요.');
+        setPublishMessage(wizardMode && shortParts.length > 1
+          ? '여러 장면을 합친 MP4가 완성되었습니다. 이 구성은 YouTube 자동 게시가 아직 지원되지 않습니다.'
+          : 'MP4가 준비되었습니다. YouTube 게시 설정을 확인해 주세요.');
         if (wizardMode) {
           changeDraft((current) => ({
             ...current, wizard: acceptStep(normalizeWizard(current.wizard, current.clips),
@@ -986,6 +1025,7 @@ function App() {
           onToggleRecommendation={(id) => setSelectedRecommendations((ids) =>
             ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id])}
           onPreviewRecommendation={previewRecommendation} onAddRecommendations={addRecommendations}
+          onComposition={editShortComposition}
           sttSetup={sttSetup} sttBusy={sttBusy}
           modelInstalling={modelInstalling} modelProgress={modelProgress}
           modelStartedAt={modelStartedAt} modelLastByteAt={modelLastByteAt}
