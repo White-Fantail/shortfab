@@ -1,6 +1,6 @@
 # ShortFab 개발환경 · Phase 0 확인 · Phase 1 저장/복원 검증
 
-> **2026-10-22 제품 UX 전환:** 앞으로 신규 개발은 [AI Guided Creation v2.0 제품 기획](PRODUCT_BLUEPRINT.md)과 [AG0~AG8 로드맵](ROADMAP.md)을 따른다. URL→AI 클립 추천→자동 화면/자막/사운드/CTA를 매 단계 수정·승인하는 마법사가 목표이며, 이 문서의 수동 UI 실행법은 **현재까지 구현된 레거시 기능**의 사용법이다. 실제 AI 추천/마법사 완성은 아직 미구현. 기존 개인용 URL→수동 클립→MP4 성공은 유지하고 회귀 테스트한다.
+> **2026-10-22 제품 UX 전환:** 앞으로 신규 개발은 [AI Guided Creation v2.0 제품 기획](PRODUCT_BLUEPRINT.md)과 [AG0~AG8 로드맵](ROADMAP.md)을 따른다. URL→AI 클립 추천→자동 화면/자막/사운드/CTA를 매 단계 수정·승인하는 마법사가 목표이며, 이 문서의 수동 UI 실행법은 **현재까지 구현된 레거시 기능**의 사용법이다. AG1 Wizard 및 AG2 실제 대사 기반 추천 코드가 추가되었으며, Mac/Windows 실제 영상 실기 수용은 미완료. 기존 개인용 URL→수동 클립→MP4 성공은 유지하고 회귀 테스트한다.
 
 상태: 2026-10-22 **기존 Phase 0/Phase 1 첫 묶음 + 개인용 실제 YouTube URL→클립→MP4 익스포트 사용자 확인 완료**. CI 타입·린트·합성 MP4 3개 테스트·빌드 통과. 실클립 3개/오디오 QC/설치 패키징·실제 YouTube 게시 및 예외/경합 검증은 후속입니다. [수용 현황](IMPLEMENTATION_STATUS.md).
 
@@ -165,3 +165,13 @@ macOS에서 `brew install yt-dlp ffmpeg` 설치 후 `npm run dev`로 시작합�
 - 고급 편집 왕복 시 같은 클립·자막·해상도가 유지되는지, 클립 구간/자막 변경 후 관련 단계만 '다시 확인'이 되는지 재검증합니다.
 - 종료/재시작으로 현재 단계·다중 클립 각각의 승인 상태를 재열기 하고 과거 schemaVersion 1 프로젝트 JSON도 열리는지 확인합니다.
 - CI: `npm run check && npm run lint && npm test && npm run build`; 추가 단위 테스트 `src/shared/wizard.test.ts`. 앱 자체 조작·YouTube 네트워크·Mac/Windows 설치 테스트 결과는 **별도 기록**합니다.
+
+
+## AG2 영상 분석/추천 개발·실기 점검
+
+[AG2 상세 문서](AG2_CLIP_RECOMMENDATIONS.md) 참고. Mac: `brew install yt-dlp ffmpeg whisper.cpp`, `ffprobe -version`·`whisper-cli -h` 확인. 앱 클립 단계에서 기본 다국어 GGML 모델 설치 후 한국어/영어 실제 발화형 영상 각각으로 테스트합니다. 첫 분석은 길이에 따라 여러 구간을 전사하므로 무겁고, 이후 '더 짧게/더 역동적으로'는 모델 재실행 없이 cached transcript를 활용해야 합니다.
+
+- URL/길이→원본 승인→클립 02에서 **AI 음성 분석 · 클립 자동 추천**→후보 카드 2개 이상→재생→멀티 선택→구간/전사 문장 IN·OUT 수정→승인→저장·재열기→MP4 수용.
+- 후보가 5개보다 적으면 더미 추천 추가 없음. 무음/오디오 트랙 없음/모델·yt-dlp 누락 및 접근 제한 영상에서는 오류/수동 선택을 확인.
+- 30분 영상과 최초 60분 분석 상한, 프로그레스, 취소→재시도, 기존 수동 클립·승인 필드 보존, 모델/언어 변경 시 캐시 무효화 확인.
+- CI: `npm run check && npm run lint && npm test && npm run build`; `src/shared/recommendations.test.ts` 및 `electron/analyze.test.ts`는 오프라인 합성 실험이며 실제 Whisper 모델/YouTube 네트워크 테스트가 아님.
