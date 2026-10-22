@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateSubtitleTrack, type SubtitleCue, type SubtitleHook, type SubtitleTrack } from '../src/shared/subtitles.js';
+import type { FixedStyleSlots } from '../src/shared/short-styles.js';
 
 export interface CaptionInterval {
   start: number;
@@ -36,7 +37,7 @@ export function captionOverlayGraph(layoutGraph: string, complex: boolean): stri
 // This script runs in an isolated, hidden Electron window, never on an external site.
 // Canvas uses system fonts for Korean/English without FFmpeg's optional libass library.
 const PAINT_CANVAS = [
-  'function(model){',
+  'async function(model){',
   'const c=document.createElement("canvas"); c.width=model.width; c.height=Math.round(model.width*16/9);',
   'const ctx=c.getContext("2d",{alpha:true}); if(!ctx)throw Error("Canvas 2D unavailable");',
   'const s=model.width/720;',
@@ -79,6 +80,25 @@ const PAINT_CANVAS = [
   'y+=lineHeight;',
   '}',
   '}',
+  'async function fixedSlot(slot,pos){',
+  'if(!slot)return;',
+  'const top=pos==="top"; const bandY=top?20*s:c.height-190*s; const bandH=156*s;',
+  'if(slot.kind==="text"){',
+  'let size=slot.size*s; const text=slot.text;',
+  'ctx.font="900 "+size+"px Apple SD Gothic Neo, Noto Sans CJK KR, Arial, sans-serif";',
+  'while(ctx.measureText(text).width>c.width-64*s && size>16*s){size-=2*s;ctx.font="900 "+size+"px Apple SD Gothic Neo, Noto Sans CJK KR, Arial, sans-serif";}',
+  'if(slot.background){ctx.fillStyle="rgba(10,10,18,.82)";ctx.fillRect(0,bandY,c.width,bandH);}',
+  'ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";',
+  'ctx.strokeStyle="#121218";ctx.lineWidth=3*s;ctx.fillStyle=slot.color;',
+  'ctx.strokeText(text,c.width/2,bandY+bandH/2);ctx.fillText(text,c.width/2,bandY+bandH/2);',
+  '}else{',
+  'const img=new Image();img.src=slot.dataUrl;await img.decode();',
+  'const maxW=(c.width-50*s)*slot.scale/100;const maxH=bandH*slot.scale/100;',
+  'const ratio=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight);',
+  'ctx.drawImage(img,(c.width-img.naturalWidth*ratio)/2,bandY+(bandH-img.naturalHeight*ratio)/2,img.naturalWidth*ratio,img.naturalHeight*ratio);',
+  '}',
+  '}',
+  'await fixedSlot(model.fixed?.top,"top"); await fixedSlot(model.fixed?.bottom,"bottom");',
   'if(model.cue)draw(model.cue.text,model.cue.emphasis?',
   '{size:62,color:"#ffe500",bold:true,outline:5,bottom:160}:presets[model.preset],"cue");',
   'if(model.hook)draw(model.hook.text,model.hook.style==="banner"?',
@@ -93,11 +113,12 @@ export const CAPTION_CANVAS_SCRIPT_FOR_TEST = PAINT_CANVAS;
 
 /** Produces one timestamped PNG stream (not 30 simultaneous FFmpeg inputs). */
 export async function createCaptionOverlay(
-  track: SubtitleTrack, seconds: number, width: number, directory: string,
-  cancelled: () => boolean = () => false,
+  track: SubtitleTrack | null, seconds: number, width: number, directory: string,
+  cancelled: () => boolean = () => false, fixed: FixedStyleSlots | undefined = undefined,
 ): Promise<string> {
-  const intervals = captionIntervals(track, seconds);
-  if (!intervals.length) throw new Error('합성할 자막 구간이 없습니다.');
+  const intervals = track ? captionIntervals(track, seconds) :
+    [{ start: 0, end: seconds, cue: null, hook: null }];
+  if (!intervals.length) throw new Error('합성할 자막 또는 고정 콘텐츠가 없습니다.');
   // Dynamic import so the pure graph/timeline tests run without an Electron process.
   const { BrowserWindow } = await import('electron');
   if (typeof BrowserWindow !== 'function') throw new Error('Electron 자막 캔버스를 실행할 수 없습니다.');
@@ -110,7 +131,7 @@ export async function createCaptionOverlay(
     let last = '';
     for (const interval of intervals) {
       if (cancelled()) throw new Error('렌더가 취소되었습니다.');
-      const model = { width, preset: track.preset, cue: interval.cue, hook: interval.hook };
+      const model = { width, preset: track?.preset ?? 'classic', cue: interval.cue, hook: interval.hook, fixed };
       const key = JSON.stringify(model);
       let filename = names.get(key);
       if (!filename) {

@@ -8,12 +8,14 @@ import type { RenderProgress, RenderRequest } from '../src/shared/contracts.js';
 import type { LayoutStyle } from '../src/shared/layout-styles.js';
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
 import type { NarrationConfig } from '../src/shared/narration.js';
+import type { ShortStyleSelection } from '../src/shared/short-styles.js';
 
 export interface CompositionPart {
   request: RenderRequest;
   layout: LayoutStyle | null;
   subtitles: SubtitleTrack | null;
   narration: NarrationConfig | null;
+  style: ShortStyleSelection | null;
 }
 
 /** One MP4 from an ordered list of non-contiguous ranges of ONE source.
@@ -51,7 +53,7 @@ export class CompositionTask {
         await this.segment.run(sourcePath, filename, part.request, (value) => {
           const seconds = completedSeconds + Math.min(duration, value.seconds);
           progress({ phase: 'render', seconds, percent: Math.min(92, Math.floor(seconds / totalSeconds * 92)) });
-        }, part.subtitles, part.layout, part.narration, true);
+        }, part.subtitles, part.layout, part.narration, true, part.style);
         this.segment = null;
         completedSeconds += duration;
       }

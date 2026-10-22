@@ -500,7 +500,8 @@ app.whenReady().then(() => {
     if (activeParts.length === 1) {
       currentTask = new RenderTask();
       await currentTask.run(sourcePath, path, ffmpegRequests[0], report,
-        firstClip.subtitles ?? null, firstClip.layout ?? null, firstClip.narration ?? null);
+        firstClip.subtitles ?? null, firstClip.layout ?? null, firstClip.narration ?? null,
+        false, firstClip.style ?? null);
       await publisher.recordRender(path, projectId, firstClip.id, firstClip.start, firstClip.end,
         firstClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null,
         JSON.stringify({ subtitles: firstClip.subtitles ?? null, narration: firstClip.narration ?? null }),
@@ -510,6 +511,7 @@ app.whenReady().then(() => {
       await currentTask.run(sourcePath, path, activeParts.map((part, index) => ({
         request: ffmpegRequests[index], subtitles: part.subtitles ?? null,
         layout: part.layout ?? null, narration: part.narration ?? null,
+        style: part.style ?? null,
       })), report);
       // A multi-part output needs an aggregate publish manifest/rights review.
       // Do NOT attach a single-clip publishing authorization to a stitched MP4.

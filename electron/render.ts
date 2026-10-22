@@ -13,6 +13,7 @@ import { captionOverlayGraph, createCaptionOverlay } from './caption-overlay.js'
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
 import { validateNarration, type NarrationConfig } from '../src/shared/narration.js';
 import { narrationAudioFilter, synthesizeNarration } from './narration.js';
+import { validateShortStyle, type ShortStyleSelection } from '../src/shared/short-styles.js';
 
 const ffmpegBin = () => process.env.SHORTFAB_FFMPEG_PATH || 'ffmpeg';
 
@@ -41,6 +42,7 @@ export class RenderTask {
     layout: LayoutStyle | null = null,
     narration: NarrationConfig | null = null,
     forceAudio = false,
+    style: ShortStyleSelection | null = null,
   ): Promise<void> {
     if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
     const temporaryPath = join(dirname(outputPath), `.shortfab-${randomUUID()}.mp4`);
@@ -56,17 +58,20 @@ export class RenderTask {
       const finalSubtitles: SubtitleTrack | null = spoken ? {
         preset: subtitles?.preset ?? 'classic', cues: spoken.cues, hook: null,
       } : subtitles;
-      const hasCaptions = Boolean(finalSubtitles?.cues.length || finalSubtitles?.hook);
-      const selected = hasCaptions ? await selectCaptionRenderer(ffmpegBin()) :
+      const fixed = validateShortStyle(style)?.fixed;
+      const hasCaptions = Boolean(finalSubtitles?.cues.length || finalSubtitles?.hook || fixed);
+      // Fixed image/text overlays require the Canvas renderer, even with ASS available.
+      const selected = fixed ? { binary: ffmpegBin(), mode: 'overlay' as const } :
+        hasCaptions ? await selectCaptionRenderer(ffmpegBin()) :
         { binary: ffmpegBin(), mode: 'none' as const };
-      if (hasCaptions && finalSubtitles) {
+      if (hasCaptions) {
         subtitleDir ??= await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
-        if (selected.mode === 'ass') {
+        if (selected.mode === 'ass' && finalSubtitles) {
           // Private ASCII basename via cwd avoids platform-specific filter path escaping.
           await writeFile(join(subtitleDir, 'captions.ass'), buildAss(finalSubtitles, clipSeconds), { mode: 0o600 });
         } else {
           await createCaptionOverlay(finalSubtitles, clipSeconds, request.width, subtitleDir,
-            () => this.cancelled);
+            () => this.cancelled, fixed);
         }
       }
       if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
