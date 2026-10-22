@@ -9,7 +9,7 @@
 - 03 스타일 카드 하나로 **레이아웃+자막 프리셋**을 결정하는 8개 결합 스타일. 04 나레이션(OFF/시스템 TTS 원고/한국어 또는 영어) → 05 자막 확인 순서로 조정.
 - TTS ON 시 macOS `say`로 각 원고 문장을 읽어 **실제 음성 길이 기반 타임코드**로 자막 출력하며, 원본 오디오 18% 믹스. TTS 길이가 영상보다 길면 거부. TTS OFF에서는 기존 Whisper 대사·자막/Hook 유지.
 - 클립별 `style` ID+버전, `narration` 설정 저장·구 프로젝트 누락 필드 허용. 선택 변경 시 하위 단계 needs_review와 MP4 게시 서명 갱신. 순수함수 검증 테스트 추가.
-- **미확인:** CI 통과·실제 3개 Shorts 효과 직접 분석, macOS 시스템 보이스 설치/실제 TTS 출력/ASS·Canvas 경로/A-V QC/취소/Windows. 나레이션 미리듣기, BGM, CTA, 실제 재생 합성 프리뷰는 미구현. [기술 상세](UNIFIED_STYLE_NARRATION.md).
+- **자동 확인:** dev GitHub Actions Code Quality(`eb69154`)의 typecheck/lint/test/build 성공. 합성 소스로 FFmpeg 크롭/블러/PNG 오버레이+나레이션 오디오 믹스 MP4 3종 수동 스모크 성공. **미확인:** 실제 3개 Shorts 효과 직접 분석, macOS 시스템 보이스 설치·실제 TTS 출력·A/V 싱크/취소/Windows. 나레이션 미리듣기, BGM, CTA, 실제 재생 합성 프리뷰는 미구현. [기술 상세](UNIFIED_STYLE_NARRATION.md).
 
 ## 제품 v2.0 전환 현황 (2026-10-22)
 
