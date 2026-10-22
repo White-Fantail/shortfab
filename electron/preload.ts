@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('shortfab', {
   personalToolAvailable: (): Promise<boolean> => ipcRenderer.invoke('personal:status'),
   sttStatus: (): Promise<SttStatus> => ipcRenderer.invoke('stt:status'),
   chooseSttModel: (): Promise<SttStatus> => ipcRenderer.invoke('stt:chooseModel'),
+  installSttModel: (): Promise<SttStatus> => ipcRenderer.invoke('stt:installModel'),
+  cancelSttModel: (): Promise<void> => ipcRenderer.invoke('stt:cancelModel'),
   transcribeClip: (request: SttRequest): Promise<SttResult> => ipcRenderer.invoke('stt:start', request),
   cancelTranscription: (): Promise<void> => ipcRenderer.invoke('stt:cancel'),
   onSttProgress: (callback: (progress: SttProgress) => void): (() => void) => {

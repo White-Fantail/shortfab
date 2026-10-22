@@ -23,6 +23,8 @@ declare global {
       personalToolAvailable(): Promise<boolean>;
       sttStatus(): Promise<SttStatus>;
       chooseSttModel(): Promise<SttStatus>;
+      installSttModel(): Promise<SttStatus>;
+      cancelSttModel(): Promise<void>;
       transcribeClip(request: SttRequest): Promise<SttResult>;
       cancelTranscription(): Promise<void>;
       onSttProgress(callback: (progress: SttProgress) => void): () => void;

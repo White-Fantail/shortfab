@@ -52,6 +52,7 @@ function App() {
   const [personalToolReady, setPersonalToolReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
   const [sttBusy, setSttBusy] = useState(false);
+  const [modelInstalling, setModelInstalling] = useState(false);
   const [sttLanguage, setSttLanguage] = useState<SttLanguage>('auto');
   const [sttSetup, setSttSetup] = useState<SttStatus | null>(null);
   const [sttMessage, setSttMessage] = useState('');
@@ -486,6 +487,25 @@ function App() {
     }));
   }
 
+  async function installSttModel() {
+    if (!window.shortfab || busy || rendering || publishingBusy || sttBusy || modelInstalling) return;
+    setModelInstalling(true);
+    setBusy(true);
+    setSttMessage('기본 다국어 AI 모델을 안전하게 내려받는 중…');
+    try {
+      const status = await window.shortfab.installSttModel();
+      setSttSetup(status);
+      setSttMessage(status.modelAvailable
+        ? '기본 다국어 AI 모델 설치 완료. 언어를 선택하고 자동 자막 생성을 누르세요.'
+        : '모델 다운로드가 취소되었습니다. 기존 자막은 유지됩니다.');
+    } catch (cause) {
+      setSttMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setModelInstalling(false);
+      setBusy(false);
+    }
+  }
+
   async function chooseSttModel() {
     if (!window.shortfab || busy || rendering || publishingBusy || sttBusy) return;
     setBusy(true);
@@ -825,8 +845,15 @@ function App() {
                   <span>{sttSetup?.engineAvailable ? '● whisper-cli 설치됨' : '○ whisper-cli 설치 필요'}</span>
                   <span>{sttSetup?.modelAvailable ? `● 모델: ${sttSetup.modelName}` : '○ GGML 모델(.bin) 선택 필요'}</span>
                 </div>
+                {!sttSetup?.modelAvailable && <button className="primary full" type="button"
+                  disabled={busy || rendering || publishingBusy || sttBusy}
+                  onClick={() => void installSttModel()}>
+                  {modelInstalling ? '다국어 모델 다운로드 중…' : '기본 한국어·영어 모델 설치 (약 148MB)'}
+                </button>}
+                {modelInstalling && <button className="cancel full" type="button"
+                  onClick={() => void window.shortfab?.cancelSttModel()}>모델 다운로드 취소</button>}
                 <button className="secondary full" type="button" disabled={busy || rendering}
-                  onClick={() => void chooseSttModel()}>GGML 모델 파일 선택…</button>
+                  onClick={() => void chooseSttModel()}>다른 GGML 모델 파일 선택…</button>
                 <button className="primary full" type="button"
                   disabled={!validClip || !!draftValidationError || busy || rendering ||
                     !sttSetup?.engineAvailable || !sttSetup.modelAvailable ||
@@ -839,7 +866,7 @@ function App() {
                 {sttMessage && <p role="status" aria-live="polite" className="hint">{sttMessage}</p>}
                 {(!sttSetup?.engineAvailable || !sttSetup.modelAvailable) &&
                   <p className="hint">로컬 준비: Mac <code>brew install whisper.cpp ffmpeg</code>.
-                    Whisper GGML multilingual 모델(.bin)을 직접 내려받아 선택하세요. 파일/음성은 외부 서버로 전송하지 않습니다.</p>}
+                    기본 모델은 버튼으로 내려받거나 기존 GGML 다국어 모델(.bin)을 선택할 수 있습니다. 모델 다운로드 때만 외부 서버에 접속하며, 영상/음성은 외부로 전송하지 않습니다.</p>}
               </div>
               <label htmlFor="caption-preset">자막 스타일</label>
               <select id="caption-preset" value={clip.subtitles?.preset ?? 'classic'}
