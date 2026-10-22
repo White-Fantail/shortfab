@@ -956,7 +956,7 @@ function App() {
           hasCachedTranscript={clip?.source === 'youtube' && !!clip && analysis?.videoId === youtubeId &&
             hasTranscriptForClip(analysis, clip.start, clip.end)}
           onSuggestDecorations={applyCaptionSuggestions}
-          captionDraftMessage={captionDraftMessage}
+          captionDraftMessage={captionDraftMessage} sttMessage={sttMessage}
           onSeekCaption={(seconds) => { moveTo(seconds); }}
           onUpdateCaption={updateCaption}
           onRemoveCaption={removeCaption}
@@ -1153,6 +1153,7 @@ function App() {
                 }))}>
                 {SUBTITLE_PRESETS.map((preset) => <option key={preset} value={preset}>{{
                   classic: '기본 흰색', bold: '강조 노랑', minimal: '미니멀', boxed: '배경 박스',
+                  neon: '네온 팝', cinema: '시네마', impact: '임팩트', topline: '상단 자막',
                 }[preset]}</option>)}
               </select>
               {(clip.subtitles?.cues ?? []).map((cue, index) => <div key={cue.id} className="caption-cue">
