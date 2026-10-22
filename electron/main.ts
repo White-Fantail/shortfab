@@ -213,18 +213,20 @@ app.whenReady().then(() => {
     if (clip.end - clip.start > MAX_STT_SECONDS) {
       throw new Error('자동 자막은 10분 이하 클립에서 지원합니다. IN/OUT 구간을 줄여 주세요.');
     }
-    const modelPath = await sttModelPath();
-    if (!await modelValid(modelPath)) throw new Error('GGML Whisper 모델(.bin)을 먼저 선택해 주세요.');
-    const videoId = projects.activeYoutubeVideoId;
-    const local = clip.source === 'local' ? projects.activeSource : null;
-    const direct = clip.source === 'youtube' && videoId !== null && request.sourceId === personalSourceId(videoId);
-    if (clip.source === 'local' && (!local || local.id !== request.sourceId)) {
-      throw new Error('로컬 영상 원본이 연결되지 않았습니다.');
-    }
-    if (clip.source === 'youtube' && !videoId) throw new Error('YouTube 원본 정보가 올바르지 않습니다.');
+    // Lock before the first await: concurrent start/render/save IPC must not race model checks.
     sttBusy = true;
     sttCancelled = false;
     try {
+      const modelPath = await sttModelPath();
+      if (!await modelValid(modelPath)) throw new Error('GGML Whisper 모델(.bin)을 먼저 선택해 주세요.');
+      if (sttCancelled) return { status: 'cancelled' };
+      const videoId = projects.activeYoutubeVideoId;
+      const local = clip.source === 'local' ? projects.activeSource : null;
+      const direct = clip.source === 'youtube' && videoId !== null && request.sourceId === personalSourceId(videoId);
+      if (clip.source === 'local' && (!local || local.id !== request.sourceId)) {
+        throw new Error('로컬 영상 원본이 연결되지 않았습니다.');
+      }
+      if (clip.source === 'youtube' && !videoId) throw new Error('YouTube 원본 정보가 올바르지 않습니다.');
       let sourcePath = local?.path ?? '';
       let offset = 0;
       if (clip.source === 'youtube') {
