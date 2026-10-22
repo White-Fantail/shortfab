@@ -60,7 +60,6 @@ export class RenderTask {
         { binary: ffmpegBin(), mode: 'none' as const };
       if (hasCaptions && finalSubtitles) {
         subtitleDir ??= await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
-        subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
         if (selected.mode === 'ass') {
           // Private ASCII basename via cwd avoids platform-specific filter path escaping.
           await writeFile(join(subtitleDir, 'captions.ass'), buildAss(finalSubtitles, clipSeconds), { mode: 0o600 });

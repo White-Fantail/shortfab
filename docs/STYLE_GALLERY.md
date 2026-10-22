@@ -1,10 +1,12 @@
-# ShortFab 스타일 갤러리 UX — AG3 / AG4 1차 구현
+# ShortFab 통합 스타일 갤러리 UX — AG3 / AG4 / AG5
 
 - 결정: 2026-10-22 (사용자 지시: 자동 배치 대신 다양한 화면/자막 스타일의 슬라이드형 미리보기 카드에서 직접 선택)
 - 구현 브랜치: `dev`. 기본 출력 유지: 9:16 MP4/FFmpeg, YouTube source cache.
 - 기준: [ROADMAP](ROADMAP.md) · [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md) · [UX](UX_WORKFLOWS.md)
 
-## 사용 흐름
+> **2026-10-22 변경 사항:** 화면 카드 4종과 자막 카드 8종을 분리 선택하는 UX는 이전 구현 기록이다. 최신 dev 기본 흐름은 **03 통합 스타일 8종 → 04 나레이션 → 05 자막 확인**. 선택 시 layout+subtitle.preset이 동시에 바뀌며 구 자막 원문/시간은 보존된다. [최신 상세](UNIFIED_STYLE_NARRATION.md). 아래 항목의 과거 03/04 두 갤러리 설명은 **히스토리**다.
+
+## 사용 흐름 (이전 구현 기록)
 
 1. YouTube URL 입력, AG2 추천 또는 직접 클립 추가 후 **03 화면**으로 이동.
 2. 여러 화면 스타일 카드를 가로로 스와이프/화살표로 넘기고 탭해 선택. 동일 원본 썸네일을 스타일별 구도로 보여준다.
