@@ -9,10 +9,21 @@ const ASS_STYLES: Record<SubtitleTrack['preset'], string> = {
   bold: 'Bold,Arial,60,&H0000E5FF,&H0000E5FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,42,42,150,1',
   minimal: 'Minimal,Arial,40,&H00FFFFFF,&H00FFFFFF,&H00181818,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,48,48,170,1',
   boxed: 'Boxed,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H390F0F0F,-1,0,0,0,100,100,0,0,3,12,0,2,45,45,155,1',
+  neon: 'Neon,Arial,54,&H00FFDD42,&H00FFDD42,&H00501030,&H90000000,-1,0,0,0,100,100,0,0,1,5,2,2,48,48,155,1',
+  cinema: 'Cinema,Arial,42,&H00FFFFFF,&H00FFFFFF,&H00202020,&H80000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,180,1',
+  impact: 'Impact,Arial,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,5,2,2,35,35,185,1',
+  topline: 'Topline,Arial,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H70000000,-1,0,0,0,100,100,0,0,1,3,1,8,44,44,175,1',
 };
 const STYLE_NAMES: Record<SubtitleTrack['preset'], string> = {
   classic: 'Classic', bold: 'Bold', minimal: 'Minimal', boxed: 'Boxed',
+  neon: 'Neon', cinema: 'Cinema', impact: 'Impact', topline: 'Topline',
 };
+
+const SPECIAL_STYLES = [
+  'Emphasis,Arial,62,&H0000E5FF,&H0000E5FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,35,35,160,1',
+  'HookBanner,Arial,62,&H00FFFFFF,&H00FFFFFF,&H00000000,&H500C101A,-1,0,0,0,100,100,0,0,3,18,0,8,35,35,135,1',
+  'HookSimple,Arial,60,&H00FFFF66,&H00FFFF66,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,5,1,8,35,35,135,1',
+] as const;
 
 function assTime(seconds: number): string {
   const cs = Math.round(seconds * 100);
@@ -34,14 +45,19 @@ export function buildAss(track: SubtitleTrack, clipSeconds: number): string {
   if (!checked) throw new Error('자막 데이터가 없습니다.');
   const style = STYLE_NAMES[checked.preset];
   const events = [...checked.cues].sort((a, b) => a.start - b.start).map((cue) =>
-    'Dialogue: 0,' + assTime(cue.start) + ',' + assTime(cue.end) + ',' + style +
-    ',,0,0,0,,' + assText(cue.text));
+    'Dialogue: 0,' + assTime(cue.start) + ',' + assTime(cue.end) + ',' +
+    (cue.emphasis ? 'Emphasis' : style) + ',,0,0,0,,' + assText(cue.text));
+  // The hook sits at top (ASS alignment 8), regular captions remain at bottom.
+  if (checked.hook) events.push('Dialogue: 1,0:00:00.00,' + assTime(checked.hook.duration) + ',' +
+    (checked.hook.style === 'banner' ? 'HookBanner' : 'HookSimple') +
+    ',,0,0,0,,' + assText(checked.hook.text));
   return [
     '[Script Info]', 'ScriptType: v4.00+', 'PlayResX: 720', 'PlayResY: 1280',
     'WrapStyle: 0', 'ScaledBorderAndShadow: yes', '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     ...Object.values(ASS_STYLES).map((value) => 'Style: ' + value),
+    ...SPECIAL_STYLES.map((value) => 'Style: ' + value),
     '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     ...events, '',
   ].join('\n');
