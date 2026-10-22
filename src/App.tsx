@@ -140,7 +140,8 @@ function App() {
       allowRepost: false, expiresAt: null, expectedSha256: null, startOffsetSeconds: 0,
     });
     setDirty(false);
-    setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.media ? 'local' : 'youtube'));
+    // The default guided workflow always starts with the YouTube reference; Advanced Edit can select local media.
+    setSourceTab('youtube');
     setLoopClip(false);
     setPlaying(false);
     isScrubbing.current = false;
