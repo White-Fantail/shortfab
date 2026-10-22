@@ -50,7 +50,7 @@ export function layoutFilter(width: OutputWidth, input: LayoutStyle | null | und
       '[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30[v]';
     return { graph, complex: true, output: '[v]' };
   }
-  const position = layout.id === 'focus-left' ? 0 : layout.id === 'focus-right' ? 100 : layout.focus;
+  const position = layout.focus; // Manual refinements apply to every crop preset.
   const x = position === 0 ? '0' : position === 100 ? 'iw-ow' :
     `(iw-ow)*${Number((position / 100).toFixed(4))}`;
   return {
