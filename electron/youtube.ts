@@ -39,6 +39,7 @@ interface Artifact {
   end: number;
   width: number;
   subtitleSignature: string;
+  layoutSignature: string;
 }
 
 interface UploadResponse {
@@ -257,16 +258,16 @@ export class YouTubePublisher {
       artifact: this.artifact ? {
         filename: basename(this.artifact.path), projectId: this.artifact.projectId, clipId: this.artifact.clipId,
         start: this.artifact.start, end: this.artifact.end, width: this.artifact.width,
-        sourceBindingId: this.artifact.sourceBindingId, subtitleSignature: this.artifact.subtitleSignature,
+        sourceBindingId: this.artifact.sourceBindingId, subtitleSignature: this.artifact.subtitleSignature, layoutSignature: this.artifact.layoutSignature,
       } : null,
       jobs: vault.jobs.slice(-20).reverse().map(jobView),
     };
   }
 
-  async recordRender(path: string, projectId: string, clipId: string, start: number, end: number, width: number, sourceBindingId: string | null, subtitleSignature: string): Promise<void> {
+  async recordRender(path: string, projectId: string, clipId: string, start: number, end: number, width: number, sourceBindingId: string | null, subtitleSignature: string, layoutSignature: string): Promise<void> {
     const info = await stat(path);
     if (!info.isFile() || info.size < 1) throw new Error('익스포트 파일이 올바르지 않습니다.');
-    this.artifact = { path, projectId, clipId, start, end, width, sourceBindingId, subtitleSignature };
+    this.artifact = { path, projectId, clipId, start, end, width, sourceBindingId, subtitleSignature, layoutSignature };
   }
 
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
