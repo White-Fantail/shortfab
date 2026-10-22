@@ -1,6 +1,6 @@
 import type { ProjectClip } from './projects.js';
 
-export const WIZARD_STEPS = ['source', 'clips', 'layout', 'subtitles', 'audio', 'cta', 'review', 'export'] as const;
+export const WIZARD_STEPS = ['source', 'clips', 'layout', 'audio', 'subtitles', 'cta', 'review', 'export'] as const;
 export type WizardStep = typeof WIZARD_STEPS[number];
 export type WizardStatus = 'not_started' | 'generating' | 'proposed' | 'accepted' | 'needs_review' | 'failed' | 'skipped';
 export type WizardField = string | number | boolean | null;
@@ -161,9 +161,12 @@ export function reconcileWizard(wizard: WizardRecord | undefined, before: Wizard
     const widthChanged = old.width !== clip.width;
     const layoutChanged = JSON.stringify(old.layout ?? null) !== JSON.stringify(clip.layout ?? null);
     const captionsChanged = JSON.stringify(old.subtitles ?? null) !== JSON.stringify(clip.subtitles ?? null);
+    const styleChanged = JSON.stringify(old.style ?? null) !== JSON.stringify(clip.style ?? null);
+    const narrationChanged = JSON.stringify(old.narration ?? null) !== JSON.stringify(clip.narration ?? null);
     const nameChanged = old.title !== clip.title;
-    if (rangeChanged) next = staleSteps(next, clip.id, ['clips', 'layout', 'subtitles', 'audio', 'cta', 'review', 'export']);
-    else if (widthChanged || layoutChanged) next = staleSteps(next, clip.id, ['layout', 'review', 'export']);
+    if (rangeChanged) next = staleSteps(next, clip.id, ['clips', 'layout', 'audio', 'subtitles', 'cta', 'review', 'export']);
+    else if (widthChanged || layoutChanged || styleChanged) next = staleSteps(next, clip.id, ['layout', 'subtitles', 'review', 'export']);
+    else if (narrationChanged) next = staleSteps(next, clip.id, ['audio', 'subtitles', 'review', 'export']);
     else if (captionsChanged) next = staleSteps(next, clip.id, ['subtitles', 'review', 'export']);
     else if (nameChanged) next = staleSteps(next, clip.id, ['review', 'export']);
   }

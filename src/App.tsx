@@ -14,7 +14,7 @@ import { WizardPanel, WizardProgress } from './WizardPanel';
 import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
 import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode, TranscriptSegment } from './shared/recommendations';
 import { captionsFromAnalysis, hasTranscriptForClip, suggestSubtitleDecorations } from './shared/caption-suggestions';
-import { layoutSignature } from './shared/layout-styles';
+import { compositionStyleSignature } from './shared/style-signature';
 
 type SourceTab = 'local' | 'youtube';
 type OutputTab = 'export' | 'publish';
@@ -124,8 +124,8 @@ function App() {
     publishing?.artifact?.start === clip?.start &&
     publishing?.artifact?.end === clip?.end &&
     publishing?.artifact?.width === clip?.width &&
-    publishing?.artifact?.subtitleSignature === JSON.stringify(clip?.subtitles ?? null) &&
-    publishing?.artifact?.layoutSignature === layoutSignature(clip?.layout) &&
+    publishing?.artifact?.subtitleSignature === JSON.stringify({ subtitles: clip?.subtitles ?? null, narration: clip?.narration ?? null }) &&
+    publishing?.artifact?.layoutSignature === compositionStyleSignature(clip) &&
     publishing?.artifact?.sourceBindingId === (clip?.source === 'youtube' ? linkedAsset?.sourceAssetId ?? null : null);
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
   const canPublish = !analysisBusy && publishReady &&

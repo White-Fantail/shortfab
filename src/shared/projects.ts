@@ -3,6 +3,8 @@ import type { SourceResolution, StoredMediaBinding } from './sources.js';
 import { validateSubtitleTrack, type SubtitleTrack } from './subtitles.js';
 import { normalizeWizard, type WizardRecord } from './wizard.js';
 import { validateLayout, type LayoutStyle } from './layout-styles.js';
+import { validateShortStyle, type ShortStyleSelection } from './short-styles.js';
+import { validateNarration, type NarrationConfig } from './narration.js';
 
 export type ClipSource = 'local' | 'youtube';
 
@@ -14,6 +16,8 @@ export interface ProjectClip {
   end: number;
   width: OutputWidth;
   layout?: LayoutStyle; // Legacy saved clips default to center, without visual changes.
+  style?: ShortStyleSelection | null; // Unified visual style; absent on legacy clips.
+  narration?: NarrationConfig | null;
   subtitles?: SubtitleTrack | null; // Legacy project JSON has no captions.
 }
 
@@ -122,7 +126,9 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     return {
       source, id: clip.id, title: clip.title.trim(),
       start: clip.start, end: clip.end, width: clip.width,
-      layout: validateLayout(clip.layout), subtitles: validateSubtitleTrack(clip.subtitles ?? null, clip.end - clip.start, label),
+      layout: validateLayout(clip.layout), style: validateShortStyle(clip.style),
+      narration: validateNarration(clip.narration),
+      subtitles: validateSubtitleTrack(clip.subtitles ?? null, clip.end - clip.start, label),
     };
   });
   if (value.selectedClipId !== null &&

@@ -1,7 +1,9 @@
 import type { ProjectClip, ProjectEdits } from './shared/projects';
 import { StyleGallery } from './StyleGallery';
-import { layoutDefault, validateLayout, type LayoutStyleId } from './shared/layout-styles';
-import type { SubtitleCue, SubtitlePreset, SubtitleTrack } from './shared/subtitles';
+import { validateLayout } from './shared/layout-styles';
+import { selectShortStyle } from './shared/short-styles';
+import { splitNarration, type NarrationVoice } from './shared/narration';
+import type { SubtitleCue, SubtitleTrack } from './shared/subtitles';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
 import type { ModelInstallProgress, SttLanguage, SttStatus } from './shared/stt';
@@ -10,8 +12,8 @@ import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationM
 import { repeatedSpeechWarnings, transcriptClock } from './shared/transcript-refinement';
 
 export const WIZARD_LABELS: Record<WizardStep, string> = {
-  source: '원본', clips: '클립', layout: '화면', subtitles: '자막',
-  audio: '소리', cta: 'CTA', review: '검토', export: '출력',
+  source: '원본', clips: '클립', layout: '스타일', audio: '나레이션',
+  subtitles: '자막 확인', cta: 'CTA', review: '검토', export: '출력',
 };
 const statusLabel = {
   not_started: '시작 전', generating: '분석 중', proposed: '제안 도착',
@@ -128,9 +130,9 @@ export function WizardPanel(props: Props) {
     if (clip) {
       fields.clipId = clip.id;
       if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; }
-      if (step === 'layout') { fields.width = clip.width; fields.style = validateLayout(clip.layout).id; fields.focus = validateLayout(clip.layout).focus; }
+      if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; }
       if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; fields.hook = !!clip.subtitles?.hook; fields.emphasisCount = clip.subtitles?.cues.filter(item => item.emphasis).length ?? 0; }
-      if (step === 'audio') fields.originalAudio = true;
+      if (step === 'audio') { fields.mode = clip.narration?.mode ?? 'off'; fields.voice = clip.narration?.voice ?? 'ko'; }
       if (step === 'cta') fields.enabled = false;
       if (step === 'review') fields.manualComposition = true;
     }
@@ -141,8 +143,8 @@ export function WizardPanel(props: Props) {
       <span className="eyebrow">STEP {String(currentIndex + 1).padStart(2, '0')} / 08 · {statusLabel[current.status]}</span>
       <h1>{{
         source: '어떤 영상으로 만들까요?', clips: '쇼츠에 넣을 장면을 고르세요',
-        layout: '세로 화면을 정하세요', subtitles: '자막을 확인하세요',
-        audio: '소리를 결정하세요', cta: '마무리 CTA를 선택하세요',
+        layout: '쇼츠 스타일을 고르세요', subtitles: '대사가 자막으로 나오는지 확인하세요',
+        audio: '나레이션을 추가할까요?', cta: '마무리 CTA를 선택하세요',
         review: '최종 구성을 확인하세요', export: 'MP4를 완성하세요',
       }[step]}</h1>
     </div>
@@ -305,7 +307,7 @@ export function WizardPanel(props: Props) {
     {step === 'layout' && <>
       <div className="wizard-insight">
         <strong>스타일을 직접 고르세요</strong>
-        <p>같은 원본으로 만든 4개 세로 화면 시안을 넘겨보고 선택합니다. 얼굴 자동 인식·트래킹 없이 선택한 프레임 위치와 배경 구성이 실제 FFmpeg 출력에 반영됩니다.</p>
+        <p>화면 구성과 자막 디자인을 하나로 묶은 스타일을 선택합니다. 스타일을 변경해도 대사와 타이밍은 유지됩니다.</p>
       </div>
       <div className="style-frame-actions">
         <button type="button" className="secondary" disabled={!clip || disabled}
@@ -313,9 +315,10 @@ export function WizardPanel(props: Props) {
         {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>프레임 불러오기 취소</button>}
         {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
       </div>
-      <StyleGallery kind="layout" videoId={youtubeId} frameImage={props.frameImage}
-        selected={validateLayout(clip?.layout).id} focus={validateLayout(clip?.layout).focus}
-        disabled={!clip || disabled} onChoose={(id) => props.onClip({ layout: layoutDefault(id as LayoutStyleId) })} />
+      <StyleGallery videoId={youtubeId} frameImage={props.frameImage}
+        selected={clip?.style?.id ?? null} focus={validateLayout(clip?.layout).focus}
+        sampleText={clip?.narration?.mode === 'tts' ? splitNarration(clip.narration.text)[0] : clip?.subtitles?.cues[0]?.text}
+        disabled={!clip || disabled} onChoose={(id) => props.onClip(selectShortStyle(id, clip?.subtitles))} />
       {clip && validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
         <span>화면 가로 중심 · {Math.round(validateLayout(clip.layout).focus)}%</span>
         <input type="range" min={0} max={100} step={1} disabled={disabled}
@@ -334,8 +337,8 @@ export function WizardPanel(props: Props) {
 
     {step === 'subtitles' && <>
       <div className="wizard-insight">
-        <strong>자막 스타일을 비교하고 직접 고르세요</strong>
-        <p>8개 카드 중 하나를 선택하고, 아래에서 대사·타임코드·강조·Hook을 수정하세요. 다른 스타일을 골라도 내용은 그대로입니다.</p>
+        <strong>선택한 스타일로 대사를 표시합니다</strong>
+        <p>03 스타일 단계에서 화면과 자막 디자인을 함께 고릅니다. 여기서는 원본 음성 자막을 교정하거나 나레이션 자막을 확인합니다.</p>
       </div>
       <div className="style-frame-actions">
         <button type="button" className="secondary" disabled={!clip || disabled} onClick={props.onLoadFrame}>
@@ -343,12 +346,13 @@ export function WizardPanel(props: Props) {
         {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>불러오기 취소</button>}
         {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
       </div>
-      <StyleGallery kind="subtitle" videoId={youtubeId} frameImage={props.frameImage}
-        selected={clip?.subtitles?.preset ?? 'classic'} sampleText={clip?.subtitles?.cues[0]?.text}
-        disabled={!clip || disabled}
-        onChoose={id => clip && props.onClip({ subtitles: {
-          ...(clip.subtitles ?? { preset: 'classic', cues: [] }), preset: id as SubtitlePreset,
-        } })} />
+      {clip?.narration?.mode === 'tts' ? <div className="wizard-insight">
+        <strong>나레이션 대사 → 자막 자동 연결</strong>
+        <p>나레이션 음성의 문장별 길이를 측정해 출력 시 정확한 같은 문장을 자막으로 합성합니다.
+          자막 문장을 바꾸려면 이전 나레이션 단계에서 원고를 수정하세요.</p>
+        {splitNarration(clip.narration.text).map((sentence, index) =>
+          <p key={index}>{index + 1}. {sentence}</p>)}
+      </div> : <>
       <div className="wizard-caption-methods">
         <button type="button" className="primary full" disabled={!clip || disabled || sttBusy ||
           !validClip || !!validationError || !props.hasCachedTranscript} onClick={props.onImportCaptions}>
@@ -440,12 +444,42 @@ export function WizardPanel(props: Props) {
       </section>
       <button type="button" className="secondary full" disabled={disabled} onClick={props.onAdvanced}>
         기타 자막 편집 · 고급 모드</button>
+      </>}
     </>}
 
-    {step === 'audio' && <div className="wizard-insight">
-      <strong>원본 소리 유지</strong>
-      <p>기존 MP4 출력은 원본 오디오를 보존합니다. AI 나레이션·TTS·음악 믹싱은 AG5 구현 전이므로 제공되는 것처럼 표시하지 않습니다.</p>
-    </div>}
+    {step === 'audio' && <>
+      <div className="wizard-insight">
+        <strong>원본 소리 또는 추가 나레이션</strong>
+        <p>추가 나레이션을 선택하면 macOS 시스템 음성으로 읽고 원본 소리의 볼륨을 낮춰 합성합니다.
+          작성한 원고의 문장이 자막으로 자동 출력됩니다. Windows용 TTS는 후속 지원입니다.</p>
+      </div>
+      <div className="wizard-choice-grid">
+        {(['off','tts'] as const).map(mode => <button type="button" key={mode}
+          className={(clip?.narration?.mode ?? 'off') === mode ? 'selected' : ''}
+          disabled={!clip || disabled}
+          onClick={() => props.onClip({ narration: { mode,
+            text: clip?.narration?.text ?? '', voice: clip?.narration?.voice ?? 'ko' } })}>
+          {mode === 'off' ? '원본 음성만 사용' : '나레이션 추가'}</button>)}
+      </div>
+      {clip?.narration?.mode === 'tts' && <div className="wizard-narration-editor">
+        <label htmlFor="wizard-narration-text">나레이션 원고 (1,200자 이내)</label>
+        <textarea id="wizard-narration-text" rows={7} maxLength={1200}
+          value={clip.narration.text} disabled={disabled}
+          placeholder="읽을 대사를 문장별로 입력하세요. 문장 하나가 자막 한 구간입니다."
+          onChange={event => props.onClip({ narration: { ...clip.narration!, text: event.target.value } })} />
+        <label htmlFor="wizard-narration-voice">시스템 음성</label>
+        <select id="wizard-narration-voice" disabled={disabled} value={clip.narration.voice}
+          onChange={event => props.onClip({ narration: {
+            ...clip.narration!, voice: event.target.value as NarrationVoice } })}>
+          <option value="ko">한국어 (macOS Yuna)</option>
+          <option value="en">English (macOS Samantha)</option>
+        </select>
+        <p className="hint">자막은 원고에서 생성하며 합성 때 문장별 실제 음성 길이로 타이밍을 정합니다.
+          원고가 클립보다 길면 출력하지 않고 길이를 조정하도록 안내합니다. 원본 음성 자막은 보존됩니다.</p>
+        <p className="hint">현재 {splitNarration(clip.narration.text).length}문장 · 30문장 이하.
+          글꼴·크기·위치는 03 스타일에서 선택한 디자인으로 출력됩니다.</p>
+      </div>}
+    </>}
     {step === 'cta' && <div className="wizard-insight">
       <strong>CTA 없음 (OFF)</strong>
       <p>현재 출력에는 CTA 합성이 없습니다. 팔로우·구독 문구 및 엔드카드 편집은 AG6에서 추가됩니다.</p>
@@ -458,9 +492,9 @@ export function WizardPanel(props: Props) {
       <dl className="wizard-summary">
         <div><dt>선택 클립</dt><dd>{clip?.title ?? '없음'}</dd></div>
         <div><dt>구간</dt><dd>{clip ? `${time(clip.start)} – ${time(clip.end)}` : '—'}</dd></div>
-        <div><dt>영상</dt><dd>{clip?.width ?? '—'}p · {validateLayout(clip?.layout).id}</dd></div>
-        <div><dt>자막</dt><dd>{clip?.subtitles?.cues.length ?? 0}개 · {clip?.subtitles?.preset ?? 'classic'}</dd></div>
-        <div><dt>음성·CTA</dt><dd>원본 음성 · CTA 없음</dd></div>
+        <div><dt>스타일</dt><dd>{clip?.width ?? '—'}p · {clip?.style?.id ?? '기존 개별 설정'}</dd></div>
+        <div><dt>자막</dt><dd>{clip?.narration?.mode === 'tts' ? `${splitNarration(clip.narration.text).length}개 · 나레이션 연결` : `${clip?.subtitles?.cues.length ?? 0}개 · 원본 대사`}</dd></div>
+        <div><dt>음성·CTA</dt><dd>{clip?.narration?.mode === 'tts' ? '시스템 나레이션 + 원본 소리 낮춤' : '원본 음성'} · CTA 없음</dd></div>
       </dl>
     </>}
     {step === 'export' && <>
@@ -491,6 +525,6 @@ export function WizardPanel(props: Props) {
         </button>
       </>}
     </div>
-    <p className="wizard-generate-note">{step === 'clips' ? '추천은 실제 Whisper 전사와 로컬 휴리스틱으로 생성됩니다. 이미 채택·수정한 클립은 유지됩니다.' : step === 'layout' || step === 'subtitles' ? '고정 스타일 갤러리에서 선택한 값만 적용됩니다. 사용자 편집과 클립 데이터는 보존됩니다.' : '이 단계의 AI 자동 추천은 후속 개발 예정입니다. 승인한 사용자 수정값은 덮어쓰지 않습니다.'}</p>
+    <p className="wizard-generate-note">{step === 'clips' ? '추천은 실제 Whisper 전사와 로컬 휴리스틱으로 생성됩니다. 이미 채택·수정한 클립은 유지됩니다.' : step === 'layout' || step === 'subtitles' ? '통합 스타일을 선택하며 자막/나레이션 대사는 보존됩니다.' : '이 단계의 AI 자동 추천은 후속 개발 예정입니다. 승인한 사용자 수정값은 덮어쓰지 않습니다.'}</p>
   </section>;
 }

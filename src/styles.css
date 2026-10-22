@@ -354,6 +354,9 @@
 @media(max-width:650px) { .wizard-speech-row { align-items:flex-start; flex-direction:column; } }
 
 /* AG3: tactile, horizontally swipeable style cards; a card is a composition reference. */
+.wizard-narration-editor{margin:18px 0;padding:16px;border:1px solid #393b4a;border-radius:11px;background:#1c1d2b;display:grid;gap:10px}
+.wizard-narration-editor textarea,.wizard-narration-editor select{width:100%;background:#222535;border:1px solid #44495c;color:white;border-radius:7px;padding:10px;font:inherit;font-size:12px}
+.wizard-narration-editor textarea{resize:vertical;line-height:1.6}
 .style-gallery { margin: 18px 0 24px; min-width:0; }
 .style-gallery-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:12px; }
 .style-gallery-heading strong { font-size:13px; }
