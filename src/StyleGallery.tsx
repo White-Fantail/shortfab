@@ -9,11 +9,12 @@ const subtitles: Record<SubtitlePreset, { name: string; description: string }> =
   minimal: { name: '미니멀', description: '작고 담백한 자막' },
   boxed: { name: '박스 자막', description: '반투명 어두운 배경' },
 };
-export function StyleGallery({ kind, selected, videoId, frameImage, sampleText, disabled, onChoose }: {
+export function StyleGallery({ kind, selected, videoId, frameImage, focus, sampleText, disabled, onChoose }: {
   kind: Kind;
   selected: LayoutStyleId | SubtitlePreset;
   videoId: string | null;
   frameImage?: string | null;
+  focus?: number;
   sampleText?: string;
   disabled: boolean;
   onChoose: (id: string) => void;
@@ -43,7 +44,9 @@ export function StyleGallery({ kind, selected, videoId, frameImage, sampleText, 
         <span className={`style-card-portrait preview-${kind}-${style.id}`} aria-hidden="true">
           {thumbnail ? <>
             {kind === 'layout' && style.id === 'blur-fill' && <img className="style-thumb-blur" src={thumbnail} alt="" loading="lazy" />}
-            <img className="style-thumb-primary" src={thumbnail} alt="" loading="lazy" />
+            <img className="style-thumb-primary" src={thumbnail} alt="" loading="lazy"
+              style={kind === 'layout' && selected === style.id && style.id !== 'blur-fill'
+                && Number.isFinite(focus) ? { objectPosition: `${focus}% center` } : undefined} />
           </> : <span className="style-thumb-placeholder">▣</span>}
           {kind === 'subtitle' && <span className={`style-example-text style-example-${style.id}`}>
             {(sampleText?.trim() || '여기에 자막이 나옵니다').slice(0, 55)}
