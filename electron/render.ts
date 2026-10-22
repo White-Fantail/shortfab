@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { cropFilter, type RenderProgress, type RenderRequest } from '../src/shared/contracts.js';
+import { type RenderProgress, type RenderRequest } from '../src/shared/contracts.js';
+import { layoutFilter, type LayoutStyle } from '../src/shared/layout-styles.js';
 import { probeMedia } from './media.js';
 import { buildAss } from './subtitles.js';
 import type { SubtitleTrack } from '../src/shared/subtitles.js';
@@ -31,17 +32,23 @@ export class RenderTask {
     request: RenderRequest,
     progress: (value: RenderProgress) => void,
     subtitles: SubtitleTrack | null = null,
+    layout: LayoutStyle | null = null,
   ): Promise<void> {
     if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
     const temporaryPath = join(dirname(outputPath), `.shortfab-${randomUUID()}.mp4`);
     const clipSeconds = request.end - request.start;
     let subtitleDir: string | null = null;
+    const filter = layoutFilter(request.width, layout);
+    const hasCaptions = Boolean(subtitles?.cues.length);
+    const imageFilters = filter.complex
+      ? ['-filter_complex', filter.graph + (hasCaptions ? ';[v]ass=captions.ass[outputv]' : ''),
+        '-map', hasCaptions ? '[outputv]' : '[v]']
+      : ['-map', '0:v:0', '-vf', filter.graph + (hasCaptions ? ',ass=captions.ass' : '')];
     const args = [
       '-hide_banner', '-nostdin', '-loglevel', 'error',
       '-ss', request.start.toFixed(3), '-i', sourcePath,
       '-t', clipSeconds.toFixed(3),
-      '-map', '0:v:0', '-map', '0:a:0?',
-      '-vf', cropFilter(request.width) + (subtitles?.cues.length ? ',ass=captions.ass' : ''),
+      ...imageFilters, '-map', '0:a:0?',
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
       '-movflags', '+faststart', '-progress', 'pipe:1',
