@@ -1,141 +1,98 @@
-# 아키텍처 · 도메인 모델 (초기 설계)
+# ShortFab 아키텍처 v2.0 — AI 단계별 쇼츠 제작
 
-상위 기준: [PRODUCT_BLUEPRINT.md](PRODUCT_BLUEPRINT.md). 상태: **Phase 0 핵심 동작 및 Phase 1 로컬 프로젝트/클립 첫 기능 묶음 사용자 확인 완료**. Phase 1 전체는 순차 개발 중. 로컬 파일·미디어 검사·중앙 크롭·출력/취소까지 데스크톱 코드를 추가했으나 실제 데스크톱 실행 및 배포 검증 전입니다. 나머지 구성요소는 설계 단계입니다.
+- 2026-10-22 기준 **목표 설계**. 현재 구현 완료와 구분한다.
+- 제품 정의: [PRODUCT_BLUEPRINT](PRODUCT_BLUEPRINT.md) · 상태: [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md) · 실행 순서: [ROADMAP](ROADMAP.md).
+- 현재 Electron + React/TypeScript, 로컬 프로젝트 JSON, IFrame, 개인용 yt-dlp/FFmpeg, Whisper STT 연결 및 YouTube OAuth 코드를 **교체하지 않고 단계적으로 확장**한다.
 
-## YouTube-first 소스 아키텍처 (제품 최우선 요구, 2026-10-22)
+## 1. 시스템 경계
 
-- **기본 프로젝트 시작은 타인의 기존 YouTube URL**이다. 사용자가 직접 촬영한 영상/로컬 MP4를 전제하지 않는다. 현재 앱은 링크를 임베드로 열지만 렌더 원본을 확보하지 못해 이 핵심 조건을 충족하지 못한다.
-- \`YouTubeReference(videoId, canonicalUrl, title?, channelId?, duration?)\`와 \`ClipRange\`를 미디어 바이트 획득 전에도 저장한다. 공식 IFrame API로 seek/현재 시각/IN·OUT 마커를 동기화한다.
-- \`SourceResolver\`는 **YouTube 플레이어 추출기가 아니다**. YouTube ID에 대해 권리자가 제공한 원본/적법한 클라우드 자산/본인 Studio 출력 파일이 있는지 검사하는 **권한 기반 미디어 획득 어댑터**다.
-- \`RightsGrant\`: 발췌·2차 편집·SNS 배포·상업적 사용 여부, 출처·증빙, 제한 기간, 귀속 요건. \`MediaBinding\`: YouTube videoId ↔ 렌더 가능한 원본 자산, 파일 fingerprint, 길이·타임 오프셋.
-- \`SourceResolution\` 상태는 \`loading | preview_only | rights_review | source_link_required | ready_to_render | blocked | source_lost\`. **미확보 YouTube URL만으로 FFmpeg 작업이나 자동 다운로드를 시작하지 않는다**.
-- 파일 경로/권한 토큰/네트워크 취득은 Electron 메인 프로세스가 소유한다. 승인된 호스트만 접근하고 SSRF·내부 주소·리다이렉트 검증 및 로컬 암호화 보관을 요구한다. YouTube IFrame의 동영상 트래픽을 숨겨진 저장/다운로드 경로로 전용하지 않는다.
-- Media Worker는 \`ready_to_render\` 자산만 받으며, 소스 파일 길이/해상도/오프셋 검사 후 기존 FFmpeg 엔진을 재사용한다. YouTube 탐색 타임코드와 실제 인코딩 시각이 다를 수 있다.
-- **출시 게이트:** 적법한 기존 YouTube 영상 URL → 마커 3개 → 승인 원본 자동 매칭 → 9:16 MP4 3개 생성의 종단 간 검증. 로컬 파일 출발 성공이나 YouTube **게시 API** 구현은 이와 별개.
-- 완전한 기술 조사·비공식 도구 위험·우회 아닌 대안은 [YOUTUBE_FIRST_WORKFLOW.md](YOUTUBE_FIRST_WORKFLOW.md), [ADR-0002](adr/0002-youtube-first-source-acquisition.md) 참조.
+    React Wizard UI (8 steps / preview / Advanced Edit)
+         │
+         ├── Project/Workflow State Store (local, atomic, versioned)
+         ├── AI Orchestrator (analysis, proposals, retries, cancel)
+         │    ├── Source Analyzer (meta, audio/STT, scene metadata)
+         │    ├── Clip Recommender (heuristics + optional LLM)
+         │    ├── Layout Planner (scene/face/speaker)
+         │    ├── Subtitle Stylist (text, timing, presets)
+         │    ├── Audio Planner (narration OFF/TTS/BGM/mix)
+         │    └── CTA Planner (goal and platform)
+         ├── Preview Composer (proxy/real manifest)
+         └── Electron main process
+              ├── Source/rights resolver & personal media cache
+              ├── Media worker (FFmpeg, ffprobe, whisper-cli)
+              ├── Render queue & output manifest
+              └── OAuth / publish queue (explicit user approval)
 
-## 시스템 경계
+UI는 파일 경로·토큰·AI 키를 직접 소유하지 않는다. Electron IPC로 검증된 작업 요청/진행/결과만 주고받는다. AI 모델·TTS·장면 모델은 각기 교체 가능한 어댑터로 구성한다.
 
-```text
-Desktop UI (React + TypeScript; Electron 후보)
-  ├── Project Library / Quick Create / Advanced Edit / Preview
-  ├── Source Adapters: Local File | YouTube official embed | Authorized cloud file
-  ├── Composition Domain: Clip/Cuts, Crop, Captions, Narration, Audio, CTA
-  ├── Style Catalog Client: remote read/cache/signature/compatibility/version pin
-  ├── Local Database: project JSON + SQLite metadata (후보)
-  └── Local Media Worker (separate process)
-       ├── ffprobe / FFmpeg → frame-accurate render + checks
-       ├── proxy/waveform/scene detection
-       └── render queue, cancel/retry, progress events
+## 2. 권장 도메인 모델 (스키마 설계, 미구현)
 
-Optional Cloud API
-  ├── STT/TTS/AI candidate-scoring provider adapters
-  ├── authorized trend signals → preset synthesis/validation/catalog release
-  ├── OAuth credential broker / short-lived media delivery
-  └── YouTube / Instagram / TikTok publishing adapters
+- **Project**: id, revision, name, youtubeReference?, sourceStatus, selectedClipIds, sourceAnalysisRef?, clips[], currentWizardStep, createdAt, updatedAt.
+- **SourceAnalysis**: sourceHash/videoId, duration, language, transcriptSegments(start/end/text/confidence), optionalSceneSegments, speakerSegments, fingerprint, modelVersion, completedAt.
+- **ClipSuggestion**: suggestionId, in/out, headline, summary, transcriptExcerpt, reasons[], signals?, generationId, generatorVersion; `score`를 노출한다면 의미와 비실측임을 명시.
+- **ClipComposition**: clipId, sourceRange, steps{clip,frame,caption,audio,cta,review,export}, layoutPlan, captions, audioPlan, ctaPlan, approvedRevision, renderManifestId?.
+- **StepRecord<T>**: status, proposedValue?, acceptedValue?, userOverrides/lockedPaths[], proposalVersion, acceptedAt?, sourceFingerprint, dependenciesHash, failure?, history[].
+- **LayoutPlan**: ratio/resolution, sceneIntervals[{start,end,mode,crop,focusTargets,overlaySafeAreas}], manualOverrides.
+- **CaptionPlan**: transcriptVersion, cues, stylePresetId/version, emphasis[], optionalHook, userTextLocks.
+- **AudioPlan**: sourceGain, narration{enabled,script,voiceId,segments}, bgm{enabled,assetId/licenseRef,gain}, sfx[], ducking.
+- **CTAPlan**: enabled(default false), goal, presentation(overlay/endSlate/voice/combined), text, start/end, animationPresetId, platformOverrides.
+- **RenderManifest**: compositionRevision, sourceFingerprint, layout/subtitle/audio/CTA hashes, rendererVersion, outputSpec; **RenderArtifact**: manifestHash, path, duration, size, probe/QC.
+- **PublishJob**: renderArtifactHash, account, platform, settings, userApprovedAt, state, remoteId?. 게시 자격은 원본 경로/권리 상태와 별도 검증.
 
-Deferred: cloud render workers, scheduler, multi-device sync, team access
-```
+스키마 버전과 런타임 검증, 옛 프로젝트 안전한 마이그레이션이 필수다. v1의 ProjectClip/자막 데이터를 손실 없이 변환하고 기존 advanced 타임라인은 동일한 acceptedValue를 수정한다.
 
-## 도메인 엔티티
+## 3. Step 상태 머신
 
-| 엔티티 | 핵심 속성 | 책임 |
+`not_started → generating → proposed → accepted` 가 일반 흐름이며 `failed → generating` 재시도, `accepted → needs_review → accepted` 재승인을 허용한다. 나레이션/CTA처럼 선택 사항은 `skipped`를 허용한다.
+
+- **proposed**: AI 후보가 준비되었으나 사용자가 승인하지 않은 상태.
+- **accepted**: 사용자 승인 스냅샷과 출처·버전 기록.
+- **needs_review**: 상위 입력이 바뀌어 제안은 존재하지만 다시 확인이 필요한 상태. 값을 삭제하지 않는다.
+- **failed**: 작업 오류 및 재시도 가능 상태. 기존 승인 결과를 유지한다.
+- **generating**: jobId/abort/dedupe key/시간/이벤트 상태가 추적되는 실제 진행 상태.
+- 새 AI 초안은 **임시 버전**으로 별도 저장; 승인 전에는 output의 기존 accepted 구성을 변경하지 않는다.
+- 출력이 무효라면 '최신 결과' 표시/게시 가능 상태를 해제하되 파일 자체를 사용자 동의 없이 삭제하지 않는다.
+
+## 4. 의존성 및 무효화
+
+| 상위 변경 | 자동 재검토 범위 | 보존 원칙 |
 |---|---|---|
-| Project | id, title, createdAt, updatedAt, revision | 편집 및 소스 집합의 단위 |
-| MediaAsset | id, kind, url?, localPath?, fingerprint, duration, rights, available | 탐색/렌더 가능성 분리 |
-| Transcript | assetId, language, segments, wordTimestamps, revision | 탐색/자막 출처 |
-| Clip | id, sourceId, cuts[], title, selected | 조합할 시간 구간 |
-| Composition | clipId, output, crop, subtitles, audioMix, styleSnapshot, ctaConfig | 비파괴 렌더 명세 |
-| StyleBundle / StyleVersion | id, version, hash, compatibility, components, evidence | 선언형 프리셋/불변 버전 |
-| Narration | mode, script, voiceProvider?, approvedAt?, generatedAssetId? | 해설과 오디오 자산 |
-| CTAConfig / BrandKit | enabled, goal, type, timing, content, platformOverrides | 마무리 텍스트/음성/브랜드 |
-| RenderJob | compositionRevision, outputFormat, state, artifactHash, error | 재현 가능한 파일 생성 |
-| PlatformAccount | provider, scopes, credentialRef, status | 게시 권한 관리 |
-| PublishJob | renderJobId, provider, accountId, consent, state, remoteId/url | 플랫폼별 업로드/게시 |
-| TrendSignal / CatalogRelease | source, evidence, score, validation, rollout, revoke | 트렌드 배포 근거 |
+| YouTube URL/videoId | SourceAnalysis, clip, 모든 하위 단계 | 옛 프로젝트/클립 기록 유지, 새 소스로 명시적 전환 |
+| Clip start/end | frame, caption timing/text match, audio, CTA timing, review, export | 수동 수정된 자막/오디오는 복구 가능하게 유지하고 충돌 표시 |
+| Layout scene/crop | review, export (caption 안전 영역 재검사) | 자막 교정/오디오 원고 유지 |
+| Caption text/timing/style | review, export, 필요한 경우 audio voice alignment | clip/layout 유지 |
+| AudioPlan | review, export | 다른 단계 유지 |
+| CTAPlan | review, export | 자막/화면/소리 설정 유지 |
+| Export spec | export/QC만 | AI 추천 및 편집 유지 |
 
-## 불변 계약
+해시 기반 dependency graph로 최소 무효화한다. 편집 폼에서 값이 일시적으로 유효하지 않으면 자동 저장/렌더 전 단계에서 명확하게 처리하며 기존 값이 날아가지 않도록 Draft와 Accepted를 분리한다.
 
-- MediaAsset는 `previewable`과 `renderable`을 구분. YouTube 공식 임베드 탐색만 가능하면 renderable=false.
-- Composition 수정은 revision 증가. RenderJob은 해당 revision과 `styleSnapshot` 버전을 고정해 재현성 유지.
-- `StyleBundle`은 타입/화이트리스트가 명확한 **데이터**만 포함. 카탈로그 스키마에 JavaScript URL, 동적 스크립트, 실행 바이너리 포함 금지.
-- RenderManifest는 소스 fingerprint, 시간 구간, 자막/오디오/CTA/크롭, 출력 옵션, 스타일 버전/해시를 포함. 로컬/미래 클라우드 워커 공통 계약.
-- PublishJob은 플랫폼별 독립 상태와 idempotency key를 가진다. `uploaded`와 `published`를 동일시하지 않는다.
+## 5. AI 파이프라인 계약
 
-## 처리 파이프라인
+1. **Source ingest**: URL 정규화→title/duration/권한/소스 준비. IFrame 탐색, 개인용 공개 영상 yt-dlp 캐시(접근 가능할 때), 허가 소스 YF-1/2 옵션. 모든 URL에 대해 성공을 보장하지 않는다.
+2. **Analyze**: audio extraction→whisper.cpp transcriptSegments + optional scene/speaker data. sourceFingerprint+modelVersion+config로 분석 캐시.
+3. **Recommend clips**: rule-based valid candidates + optional LLM re-ranking/explanations. 모델 출력 타임코드/중복/침묵/과장된 사실 확인을 서버/메인 프로세스에서 검증.
+4. **Compose frame**: 장면별 layoutPlan, 크롭 경계, 추적 지원 여부·confidence, 프록시 시각화.
+5. **Captions**: transcript to cues + typography/emphasis/Hook, 수동 교정 잠금과 스타일 버전.
+6. **Audio**: 원본 우선, OFF 또는 원고 후보→사용자 승인→TTS→BGM 권리 검사→믹싱.
+7. **CTA**: OFF 기본 또는 컨텐츠/목적 맞춤 문구, 기간/안전 영역 검증.
+8. **Preview/Render**: 승인 Composition을 Manifest로 고정해 렌더→ffprobe/QC→아티팩트 해시 저장. 다른 설정으로 편집되면 새 Manifest 필요.
+9. **Publish**: 외부 계정 권한·라이선스·artifact hash/중복 검증→OS 별도 승인→공식 API→상태 추적.
 
-1. 탐색 가능한 원본 확인 → 미디어 fingerprint/길이/fps/회전/오디오 상태 검사.
-2. 지정 컷 조합 → 프록시(미리보기) 또는 풀 해상도(최종 렌더).
-3. 크롭/레이아웃 → 자막·텍스트·모션 → CTA 오버레이 또는 엔드카드 추가.
-4. 원본/BGM/TTS/CTA 음성 믹스 → 자동 덕킹·정규화·리미팅.
-5. 플랫폼 규격/길이/안전 영역/자막 잘림 검사 → 인코딩 → 출력 확인 및 작업 이력.
-6. SNS 업로드는 **별도 승인과 별도 Job**으로 실행.
+실시간/비싼 AI 요청은 멱등 key, rate/cost budget, timeout/cancel/retry를 설계한다. 'AI 기능 미설치'와 '영상 다운로드 불가'는 다른 오류 코드다. STT/LLM/remote TTS의 입력 데이터 전송은 사용자에게 고지하고 가능한 경우 로컬 모드 제공.
 
-## 보안·운영
+## 6. 프리뷰 동등성 전략
 
-- OAuth 비밀과 AI API 키는 OS 키체인 또는 암호화된 서버 비밀 저장소; UI 저장 프로젝트와 렌더 로그에 평문 금지.
-- 업로드를 위한 임시 파일/URL은 최소 범위·짧은 수명으로 관리, 보존 만료 시 제거.
-- 파일 접근 권한은 프로젝트에 필요한 범위만. 클라우드 AI에 전송할 때 동의·보존 기간 안내.
-- 실패 시 복원(프로젝트 불변), 재시도(중복 방지), 오프라인(캐시된 프리셋) 경로를 포함.
-- 대용량 렌더는 별도 프로세스에서 실행; 프리뷰 응답과 UI 이벤트가 렌더 부하에 막히지 않게 함.
+YouTube iframe은 원본 탐색용이다. **합성된 숏폼의 신뢰할 수 있는 최종 프리뷰가 아니다.** 단계 03 이후 레이아웃/자막/오디오/CTA가 필요한 경우 낮은 해상도의 동일 FFmpeg 필터 그래프 프록시를 생성·캐시해 미리보기를 일치시킨다. 빠른 레이아웃 목업은 '참고용'으로 표시하고 실제 출력 QC를 별도로 수행한다.
 
-## 구현 순서
+## 7. 권리·보안·운영
 
-1. 프로젝트/MediaAsset/Clip/Composition/RenderManifest 데이터 계약과 roundtrip 저장/복원 테스트.
-2. Local worker 및 렌더/취소/재시도 계약 테스트.
-3. 선언형 기본 스타일과 CTA 설정 → 실제 샘플 영상 재현.
-4. AI adapters, 원격 카탈로그, 게시 adapters 순차 도입.
+- 현행 개인용 직접 출력: 공개 YouTube 링크→yt-dlp→FFmpeg(실기 한 건 이상 성공). 사용 가능 영상 범위, 약관/재게시 권리는 **독립 조건**.
+- 승인된 권리자 파일/HTTPS 원본과 서명 파트너 매핑은 선택형 고급 소스 경로. UserSourceStatus와 PublishEligibility는 분리.
+- 외부 API 토큰 및 키는 OS 보안 저장소/메인 프로세스. AI 프롬프트에 키·저작권 증빙·개인 정보 불필요하게 전송 금지.
+- 렌더/AI 작업 취소·재시도와 회복 가능 저장, 소스 캐시/임시 파일 수명 관리 및 디스크 할당량 제한.
+- 실제 SNS 게시 전 계정, 렌더 최신성, 권리·승인·플랫폼 API 조건 검증. 업로드 완료와 플랫폼 처리 완료 분리.
 
-## Phase 0 실험 구현 경계 (2026-10-22)
+## 8. 구현/테스트 순서
 
-- `src/App.tsx`: React 로컬 미리보기·In/Out/출력 선택 UI. YouTube는 공식 임베드 **프리뷰만** 가능하며 타임코드 API 마커는 다음 단계.
-- `src/shared/contracts.ts`: 프레임 비율, 렌더 요청 검증, YouTube 링크 ID 파싱. 실제 원본 경로는 전달하지 않음.
-- `electron/preload.ts`: 허용된 최소 IPC만 노출, `electron/main.ts`에서 사용자 파일 선택·식별자 검증·저장 경로 확인.
-- `electron/media.ts`: 로컬 ffprobe; `electron/render.ts`: 로컬 ffmpeg 하위 프로세스, 출력 크롭/진행도/취소·임시 파일 검증.
-- `shortfab-media://asset/current`: 사용자가 선택한 **현재 파일 하나만** 로컬 미리보기로 노출하는 내부 URL. 렌더 엔진이 URL을 다운로드하지 않음.
-- 별도 FFmpeg 프로세스를 사용하지만 렌더 큐·오래 지속되는 독립 워커·Phase 1에서는 프로젝트 JSON 저장·재열기·여러 클립 후보를 별도 `electron/projects.ts`로 추가. FFmpeg/FFprobe는 PATH에 설치된 바이너리를 사용.
-- 렌더 요청은 `sourceId` 일치, 유한한 시간 범위, 720/1080 해상도만 수용. 파일 시스템 경로 선택은 메인 프로세스에서만 허용.
-
-해당 프로토타입은 제품 플랫폼 확정이나 AI/SNS/스타일 카탈로그 구현을 의미하지 않습니다. 검증 순서·개발환경은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
-
-## Phase 1 저장/재열기 1차 구조 (2026-10-22)
-
-- `src/shared/projects.ts`에 Project/StoredAsset/ProjectClip/ProjectEdits/ProjectView 계약, 스키마 버전 1과 타입·구간·중복 ID 검증을 둡니다.
-- `electron/projects.ts`는 앱 사용자 데이터 폴더의 `projects/{uuid}.json` 읽기·임시 파일 원자 교체·리스트·현재 프로젝트 활성화·원본 연결/재연결을 담당합니다. 렌더러는 파일 경로 대신 편집 값만 전달합니다.
-- `project:list/create/open/save`와 `project:pickMedia/reconnectMedia`만 preload로 노출합니다. 기존 `render:start`의 sourceId와 로컬 경로 검증은 유지합니다.
-- 파일을 못 찾으면 프로젝트는 `missing` 상태로 복원하고, 재연결 때 크기·해상도·길이를 확인합니다. 전체 파일 해시는 구현하지 않았습니다.
-- Composition은 현재 클립별 선택 구간/9:16 출력 폭만 보존합니다. 복합 컷, 자막, CTA, 스타일 버전과 RenderManifest는 별도 단계이며, 현재 JSON 스키마에는 포함하지 않습니다.
-- **검증 상태:** 첫 기능 묶음 사용자 확인, CI 타입 검사·린트·단위 테스트·빌드 통과. OS별 설치·비정상 종료·파일 경합·저장 실패 시나리오는 추가 검증 과제.
-
-## Phase 2 YouTube 공식 업로드 구현 경계 (2026-10-22)
-
-- `electron/youtube.ts`는 OAuth/토큰 갱신, 전용 암호화 작업 저장소, Google `videos.insert`/분할 업로드 및 `videos.list` 상태 확인을 담당합니다. 렌더러에는 요청/상태 조회만 제공하며 토큰·업로드 URL·로컬 파일 시스템 경로는 노출하지 않습니다.
-- 승인 없는 자동 업로드는 없습니다. `render:start` 완료가 업로드를 호출하지 않으며, 별도 `publish:start` 요청에서 메인 프로세스 OS 대화상자로 파일·제목·공개 범위·아동용 설정을 보여주고 승인한 후 업로드합니다.
-- 업로드 가능한 로컬 파일은 **메인 프로세스에서 검증한 마지막 성공 MP4**뿐입니다. 현재 프로젝트/클립 구간/해상도와 일치하지 않으면 게시할 수 없습니다. 재개할 경우 해당 영상 파일의 크기·SHA-256과 OAuth 연결 세대 ID가 일치해야 합니다.
-- 서버가 업로드를 받은 뒤 응답이 끊길 수 있으므로 세션 URI를 `safeStorage`로 암호화해 기록합니다. 중단/복구 시 YouTube `308 Range`를 먼저 확인하고 새 `videos.insert` 요청은 자동 생성하지 않습니다. 세션 만료나 완료 ID 불명은 사용자에게 YouTube Studio 점검을 요청합니다.
-- 상태는 `uploading → processing → published | action_required` 또는 `failed`이며 `published`는 원격 처리 성공을 뜻하고 **전체 공개나 Shorts 분류를 의미하지 않습니다**. UI에는 게시 이력과 재확인/이어올리기 버튼을 제공합니다.
-- 구체적인 설정과 출시 게이트는 [PHASE2_YOUTUBE.md](PHASE2_YOUTUBE.md). **Google 실계정 연동/CI/OS별 앱 실행 검증 이전이므로 Phase 2 완료 상태는 아닙니다.**
-
-## YF-1 권리자 파일 매핑 (2026-10-22 개발 코드)
-
-`YouTubeReference`는 정규화된 videoId·URL·IFrame 메타데이터(길이)를 나타냅니다. `RightsGrant`는 권리자 이름, 사용 허가 증빙 참조, 발췌/변형/재게시 허용 범위와 만료를 **사용자가 선언한 데이터**로 보존합니다. `MediaBinding`은 videoId→원본 assetId·파일 SHA-256·길이·시간 오프셋을 고정하며, 실제 로컬 경로를 포함하는 `StoredMediaBinding`은 Electron 메인 프로세스 전용 프로젝트 JSON 및 `userData/sources/approved/`에만 보관합니다.
-
-`SourceResolver`는 미확보/허가 검토/파일 손실/렌더 가능 상태를 분리하고, 같은 videoId의 등록 자산을 앱 내에서 자동 매칭합니다. YouTube 클립 렌더는 `sourceTime = youtubeTime + startOffsetSeconds`로 변환하고 FFmpeg 직전에 파일·허가·해시를 재확인합니다. YouTube **게시**는 별도의 재게시 권한과 사용자 승인을 요구합니다. SHA-256·길이 검증은 YouTube 콘텐츠와의 실제 동일성/법적 권리 진위까지 증명하지 않으므로 해당 검증 및 승인 원격 스토리지 어댑터는 후속 단계입니다. [검증 가이드](YF1_AUTHORIZED_SOURCES.md).
-
-
-## 승인 클라우드 원본 경계 (YF-1, 2026-10-22)
-
-권리자 제공 직접 HTTPS 미디어만 `SHORTFAB_APPROVED_SOURCE_HOSTS` exact 호스트 allowlist와 사전 제공 SHA-256을 조건으로 허용합니다. Electron의 `electron/cloud.ts`는 메인 프로세스에서 DNS 공개 IPv4 IP 고정·TLS·리다이렉트 금지·시간/크기 제한·응답 크기/해시 확인을 수행하고, 다운로드 완료 후 기존 로컬 권한/FFprobe/타임 오프셋 검증 체계로 연결합니다. Renderer와 프로젝트 데이터에는 원격 서명 URL을 저장하지 않습니다. 파트너 API 인증/갱신/권리 매니페스트 검증과 YouTube 영상 프레임 동일성은 아직 미구현이며, 단순 해시 검증을 그것의 대체로 취급하지 않습니다.
-
-
-## YF-2 파트너 원본 조회 데이터 경계
-
-`PartnerCatalog (Electron main)` → allowlist HTTPS GET(videoId만 전송) → Ed25519 verified offer `{videoId, downloadUrl, sha256, rights, validUntil}` → `AuthorizedSources.createBinding` → `StoredMediaBinding`(main-only path) → 기존 프로젝트/FFmpeg 클립 렌더. 전송 URL의 쿼리 토큰/서명 유효기간은 로컬 JSON으로 보존하지 않으며, 사용자 제공 원본이나 임의 YouTube 공개 URL에서 스트림을 추출하지 않습니다. 파트너 공개키를 **운영자가 고정한 키**로만 받아야 하며 partner-supplied 키를 신뢰하지 않습니다. [상세](PARTNER_CATALOG.md).
-
-## 사용자 수용: YouTube URL → MP4 실제 출력 (2026-10-22)
-
-공식 IFrame에서 `videoId`/IN·OUT을 탐색한 후 개인용 로컬 다운로더와 FFmpeg가 연결되는 **실제 MP4 익스포트 성공을 사용자가 확인**했습니다. 코드/합성 테스트가 아닌 실사용 결과로 기록하되, 3개 실제 영상·오디오 싱크/QC·파일 재열기/재생 전체·OS 설치 패키징 검증과 구분합니다. YF-1/2의 라이선스 검증·파트너 API는 이 성공의 필수조건이 아니었으며 별도의 고급 경로로 남습니다. 자동 업로드/재게시 권한은 얻지 않습니다. [현황](IMPLEMENTATION_STATUS.md).
-
-## 개인용 URL 직접 인코딩 경계 (2026-10-22)
-
-`YouTubeVideoId` (검증된 11자리) → `electron/personal.ts::PersonalVideoTask.acquire` → 설치된 `yt-dlp`를 shell 없이 인수 배열로 실행 → `app.getPath('userData')/sources/personal/{videoId}.mp4`에 공개 원본 캐시 → `probeMedia` 파일/영상 길이 검증 → 기존 `RenderTask`를 원본 IN/OUT/해상도로 실행 → 결과 MP4 기록. 기존 승인 원본 경로는 `AuthorizedSources`와 YF-1 바인딩을 사용하므로 별개입니다. 개인 URL 다운로드 결과는 `sourceBindingId: youtube:{videoId}`로 기록해 승인된 사용권과 오인하지 않도록 하며, 자동 게시 권한을 부여하지 않습니다. [개인용 클립 흐름](PERSONAL_YOUTUBE_EXPORT.md), [ADR-0003](adr/0003-personal-youtube-clipping.md).
+AG1 Wizard/StepRecord 마이그레이션 → AG2 STT/ClipRecommender → AG3 LayoutPlan/프록시 → AG4 captions → AG5 audio → AG6 CTA/Review → AG7 MP4/게시/실사용. 단위: 상태 머신·invalidations·잠금/재생성·타임코드·FFmpeg manifest. 통합: 옛 저장 프로젝트, 다중 후보 3개, 모드 전환, 취소/재열기, 출력 프리뷰 일치. 실제 Mac/Windows/Google API 검증은 별도 기록.
