@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
+import { PersonalVideoTask, personalSourceId } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 import { validatePublishDraft } from '../src/shared/publishing.js';
@@ -16,6 +17,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null;
 const projects = new ProjectStore();
 let currentTask: RenderTask | null = null;
+let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
 const publisher = new YouTubePublisher((job) => {
@@ -185,23 +187,29 @@ app.whenReady().then(() => {
     const activeClip = projects.activeClip;
     const projectId = projects.activeProjectId;
     if (!activeClip || !projectId) throw new Error('익스포트할 클립을 선택해 주세요.');
-    const youtube = activeClip.source === 'youtube'
+    const videoId = projects.activeYoutubeVideoId;
+    const direct = activeClip.source === 'youtube' && !!videoId &&
+      (input as { sourceId?: string } | null)?.sourceId === personalSourceId(videoId);
+    const approved = activeClip.source === 'youtube' && !direct
       ? await projects.renderableYouTubeSource() : null;
     const local = activeClip.source === 'local' ? projects.activeSource : null;
-    if (!youtube && !local) throw new Error('렌더에 사용할 원본 파일이 없습니다.');
-    const source = youtube ? {
-      id: youtube.id, path: youtube.path, name: projects.youtubeBinding?.fileName ?? 'youtube-source.mp4',
-      duration: youtube.duration,
-    } : { id: local!.id, path: local!.path, name: local!.info.name, duration: local!.info.duration };
-    const request = validateRenderRequest(input, source.duration);
-    const offset = youtube?.offset ?? 0;
-    if (request.sourceId !== source.id ||
+    if (!direct && !approved && !local) throw new Error('렌더에 사용할 원본 영상이 없습니다.');
+    const expectedSourceId = direct ? personalSourceId(videoId!) :
+      approved?.id ?? local!.id;
+    const offset = approved?.offset ?? 0;
+    const duration = direct ? projects.activeYoutubeDuration :
+      approved?.duration ?? local?.info.duration ?? null;
+    if (duration === null) throw new Error('YouTube 영상 길이를 먼저 확인해 주세요.');
+    const request = validateRenderRequest(input, duration);
+    if (request.sourceId !== expectedSourceId ||
       Math.abs(request.start - (activeClip.start + offset)) > 0.0001 ||
       Math.abs(request.end - (activeClip.end + offset)) > 0.0001 ||
       activeClip.width !== request.width) {
       throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
     }
-      const base = parse(source.name).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
+    const sourceName = direct ? 'youtube-' + videoId : approved ?
+      projects.youtubeBinding?.fileName ?? 'youtube-source.mp4' : local!.info.name;
+    const base = parse(sourceName).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
       const options: SaveDialogOptions = {
         title: 'MP4 내보내기',
         defaultPath: `${base || 'shortfab'}-${Math.floor(request.start)}-${Math.floor(request.end)}.mp4`,
@@ -212,24 +220,40 @@ app.whenReady().then(() => {
         ? await dialog.showSaveDialog(mainWindow, options)
         : await dialog.showSaveDialog(options);
       if (chosen.canceled || !chosen.filePath) return { status: 'cancelled' };
-      if (youtube) await projects.renderableYouTubeSource(); // Recheck after save dialog.
+      if (approved) await projects.renderableYouTubeSource(); // Recheck after save dialog.
+      let sourcePath = approved?.path ?? local?.path ?? '';
+      let ffmpegRequest = request;
+      if (direct) {
+        personalTask = new PersonalVideoTask();
+        const acquired = await personalTask.acquire(videoId!, activeClip.end, (progress) => {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('render:progress', progress);
+        });
+        if (personalTask === null) throw new Error('YouTube 가져오기가 취소되었습니다.');
+        sourcePath = acquired.path;
+        ffmpegRequest = validateRenderRequest(request, acquired.duration);
+      }
       currentTask = new RenderTask();
       const path = chosen.filePath.toLowerCase().endsWith('.mp4') ? chosen.filePath : `${chosen.filePath}.mp4`;
-      await currentTask.run(source.path, path, request, (progress) => {
+      await currentTask.run(sourcePath, path, ffmpegRequest, (progress) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('render:progress', progress);
+          mainWindow.webContents.send('render:progress', {
+            ...progress,
+            phase: 'render',
+            percent: direct ? 50 + Math.floor(progress.percent * 0.5) : progress.percent,
+          });
         }
       });
       await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end,
-        activeClip.width, youtube?.id ?? null);
+        activeClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null);
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
+      personalTask = null;
       renderBusy = false;
     }
   });
 
-  ipcMain.handle('render:cancel', () => { currentTask?.cancel(); });
+  ipcMain.handle('render:cancel', () => { personalTask?.cancel(); currentTask?.cancel(); });
 
   openWindow();
   app.on('activate', () => {
@@ -240,4 +264,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => { currentTask?.cancel(); });
+app.on('before-quit', () => { personalTask?.cancel(); currentTask?.cancel(); });
