@@ -19,6 +19,8 @@ declare global {
       bindCloudSource(request: ApprovedCloudSourceRequest): Promise<ProjectView>;
       partnerCatalogStatus(): Promise<{ configured: boolean }>;
       bindPartnerSource(): Promise<ProjectView>;
+      previewClipFrame(request: { clipId: string; time: number }): Promise<{ status: 'completed'; image: string } | { status: 'cancelled' }>;
+      cancelFramePreview(): Promise<void>;
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
       personalToolAvailable(): Promise<boolean>;
