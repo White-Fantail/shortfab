@@ -40,6 +40,7 @@ function App() {
   });
   const [outputTab, setOutputTab] = useState<OutputTab>('export');
   const [playhead, setPlayhead] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const isScrubbing = useRef(false);
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
@@ -122,6 +123,7 @@ function App() {
     setDirty(false);
     setSourceTab(view.clips.find((c) => c.id === view.selectedClipId)?.source ?? (view.media ? 'local' : 'youtube'));
     setLoopClip(false);
+    setPlaying(false);
     isScrubbing.current = false;
     setScrubTime(null);
     setPlayhead(view.clips.find((c) => c.id === view.selectedClipId)?.start ?? 0);
@@ -376,6 +378,7 @@ function App() {
   }
 
   function selectSource(next: SourceTab) {
+    setPlaying(false);
     isScrubbing.current = false;
     setScrubTime(null);
     setSourceTab(next);
@@ -387,6 +390,7 @@ function App() {
   }
 
   function setYoutubeUrl(value: string) {
+    setPlaying(false);
     isScrubbing.current = false;
     setScrubTime(null);
     setCloudUrl('');
@@ -483,6 +487,12 @@ function App() {
     isScrubbing.current = false;
     setScrubTime(null);
     moveTo(time); // One seek on pointer release, not on every drag frame.
+  }
+
+  function toggleYouTubePlayback() {
+    if (sourceTab !== 'youtube' || !youtubePlayer.current) return;
+    if (playing) youtubePlayer.current.pause();
+    else youtubePlayer.current.play();
   }
 
   async function playClip() {
@@ -717,7 +727,7 @@ function App() {
               {sourceTab === 'youtube' && youtubeId ? (
                 <YouTubePreview key={youtubeId} ref={youtubePlayer} videoId={youtubeId}
                   start={clip?.start ?? null} end={clip?.end ?? null} loop={loopClip}
-                  onTime={onPlaybackTime} onDuration={onYoutubeDuration} />
+                  onTime={onPlaybackTime} onPlaying={setPlaying} onDuration={onYoutubeDuration} />
               ) : media && sourceTab === 'local' && sourceConnected ? (
                 <video key={`${project?.id}-${media.id}-${media.previewUrl}`} ref={videoRef}
                   src={media.previewUrl} controls playsInline preload="metadata"
@@ -736,7 +746,12 @@ function App() {
           </div>
           <div className="timeline">
             <div className="timeline-top">
-              <span>현재 재생 위치</span>
+              <div className="timeline-leading">
+                {sourceTab === 'youtube' && <button className="timeline-play" type="button"
+                  disabled={sourceDuration === null} aria-label={playing ? '영상 일시정지' : '영상 재생'}
+                  onClick={toggleYouTubePlayback}>{playing ? 'Ⅱ' : '▶'}</button>}
+                <span>현재 재생 위치</span>
+              </div>
               <strong className="timeline-clock">
                 <span className="timeline-current">{formatTime(currentTime)}</span>
                 <span className="timeline-clock-separator"> / </span>
