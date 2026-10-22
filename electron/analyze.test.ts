@@ -43,7 +43,7 @@ describe('AG2 local source -> transcript -> suggestions -> cache', () => {
         `00:00:${String(i * 3).padStart(2, '0')},000 --> 00:00:${String(i * 3 + 2).padStart(2, '0')},500`,
         i % 3 === 0 ? '왜 이 영상이 특별할까요? 놀라운 결과입니다!' :
           '실제로 다음 장면에서 결과를 확인했습니다.',
-      ].join('\\n')).join('\\n\\n');
+      ].join('\n')).join('\n\n');
       await writeFile(whisper, [
         '#!/usr/bin/env node',
         "const fs=require('node:fs');",
