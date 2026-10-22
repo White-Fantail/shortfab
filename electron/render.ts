@@ -40,6 +40,7 @@ export class RenderTask {
     subtitles: SubtitleTrack | null = null,
     layout: LayoutStyle | null = null,
     narration: NarrationConfig | null = null,
+    forceAudio = false,
   ): Promise<void> {
     if (this.cancelled) throw new Error('렌더가 취소되었습니다.');
     const temporaryPath = join(dirname(outputPath), `.shortfab-${randomUUID()}.mp4`);
@@ -78,7 +79,9 @@ export class RenderTask {
           : ['-map', '0:v:0', '-vf', filter.graph +
             (selected.mode === 'ass' ? ',ass=filename=captions.ass' : '')];
       const spokenIndex = selected.mode === 'overlay' ? 2 : 1;
-      const voiceAudio = spoken ? narrationAudioFilter((await probeMedia(sourcePath)).hasAudio, spokenIndex) : null;
+      const sourceHasAudio = (spoken || forceAudio) ? (await probeMedia(sourcePath)).hasAudio : true;
+      const silentAudio = forceAudio && !sourceHasAudio && !spoken;
+      const voiceAudio = spoken ? narrationAudioFilter(sourceHasAudio, spokenIndex) : null;
       const videoComplex = imageFilters[0] === '-filter_complex';
       const videoMap = videoComplex ? imageFilters.slice(2) : imageFilters;
       const combinedFilters = [
@@ -90,13 +93,15 @@ export class RenderTask {
         '-ss', request.start.toFixed(3), '-i', sourcePath,
         ...(selected.mode === 'overlay' ? ['-f', 'concat', '-safe', '0', '-i', 'captions.ffconcat'] : []),
         ...(spoken ? ['-f', 'concat', '-safe', '0', '-i', 'narration.ffconcat'] : []),
+        ...(silentAudio ? ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'] : []),
         '-t', clipSeconds.toFixed(3),
         ...(videoComplex ? [] : videoMap),
         ...(combinedFilters.length ? ['-filter_complex', combinedFilters.join(';')] : []),
         ...(videoComplex ? videoMap : []),
-        '-map', voiceAudio?.map ?? '0:a:0?',
+        '-map', voiceAudio?.map ?? (silentAudio ? String(selected.mode === 'overlay' ? 2 : 1) + ':a:0' : '0:a:0?'),
         '-c:v', 'libx264', '-preset', 'medium', '-crf', '22',
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
+        ...(forceAudio ? ['-ar', '44100', '-ac', '2'] : []),
         '-movflags', '+faststart', '-progress', 'pipe:1',
         '-y', temporaryPath,
       ];
