@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
+import { CompositionTask } from './composition.js';
 import { FramePreviewTask } from './frame.js';
 import { compositionStyleSignature } from '../src/shared/style-signature.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
@@ -23,7 +24,7 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow: BrowserWindow | null = null;
 const projects = new ProjectStore();
-let currentTask: RenderTask | null = null;
+let currentTask: RenderTask | CompositionTask | null = null;
 let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
@@ -414,69 +415,105 @@ app.whenReady().then(() => {
     if (renderBusy || sourceBusy || frameBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
-    const activeClip = projects.activeClip;
     const projectId = projects.activeProjectId;
-    if (!activeClip || !projectId) throw new Error('익스포트할 클립을 선택해 주세요.');
+    const compositeIds = (input as { compositionClipIds?: unknown } | null)?.compositionClipIds;
+    const isComposite = compositeIds !== undefined;
+    const shortParts = projects.activeShortClips;
+    if (isComposite && (!Array.isArray(compositeIds) ||
+        JSON.stringify(compositeIds) !== JSON.stringify(shortParts.map((clip) => clip.id)))) {
+      throw new Error('저장된 쇼츠 구성과 출력 요청이 다릅니다. 다시 저장하고 시도하세요.');
+    }
+    const activeParts = isComposite ? shortParts : projects.activeClip ? [projects.activeClip] : [];
+    const firstClip = activeParts[0];
+    if (!projectId || !firstClip) throw new Error('쇼츠에 사용할 클립을 먼저 선택해 주세요.');
+    if (activeParts.some((part) => part.source !== firstClip.source)) {
+      throw new Error('서로 다른 원본의 클립은 하나의 쇼츠로 합칠 수 없습니다.');
+    }
     const videoId = projects.activeYoutubeVideoId;
-    const direct = activeClip.source === 'youtube' && !!videoId &&
+    const direct = firstClip.source === 'youtube' && !!videoId &&
       (input as { sourceId?: string } | null)?.sourceId === personalSourceId(videoId);
-    const approved = activeClip.source === 'youtube' && !direct
-      ? await projects.renderableYouTubeSource() : null;
-    const local = activeClip.source === 'local' ? projects.activeSource : null;
+    const approved = firstClip.source === 'youtube' && !direct
+      ? await projects.renderableYouTubeSource(firstClip) : null;
+    const local = firstClip.source === 'local' ? projects.activeSource : null;
     if (!direct && !approved && !local) throw new Error('렌더에 사용할 원본 영상이 없습니다.');
-    const expectedSourceId = direct ? personalSourceId(videoId!) :
-      approved?.id ?? local!.id;
+    const expectedSourceId = direct ? personalSourceId(videoId!) : approved?.id ?? local!.id;
     const offset = approved?.offset ?? 0;
     const duration = direct ? projects.activeYoutubeDuration :
       approved?.duration ?? local?.info.duration ?? null;
-    if (duration === null) throw new Error('YouTube 영상 길이를 먼저 확인해 주세요.');
+    if (duration === null) throw new Error('원본 영상 길이를 먼저 확인해 주세요.');
     const request = validateRenderRequest(input, duration);
     if (request.sourceId !== expectedSourceId ||
-      Math.abs(request.start - (activeClip.start + offset)) > 0.0001 ||
-      Math.abs(request.end - (activeClip.end + offset)) > 0.0001 ||
-      activeClip.width !== request.width) {
-      throw new Error('저장된 선택 클립과 렌더 요청이 일치하지 않습니다.');
+        Math.abs(request.start - (firstClip.start + offset)) > 0.0001 ||
+        Math.abs(request.end - (firstClip.end + offset)) > 0.0001 ||
+        firstClip.width !== request.width) {
+      throw new Error('쇼츠 첫 클립과 렌더 요청이 일치하지 않습니다.');
+    }
+    // Validate every segment using the persisted ranges. Never trust caller-provided times.
+    const segmentRequests = activeParts.map((part) => validateRenderRequest({
+      sourceId: expectedSourceId, start: part.start + offset, end: part.end + offset,
+      width: firstClip.width,
+    }, duration));
+    if (approved) {
+      for (const part of activeParts) {
+        if (part.start + offset < 0 || part.end + offset > approved.duration + 0.02) {
+          throw new Error('쇼츠 클립 구간이 연결된 원본 파일 범위를 벗어났습니다.');
+        }
+      }
     }
     const sourceName = direct ? 'youtube-' + videoId : approved ?
       projects.youtubeBinding?.fileName ?? 'youtube-source.mp4' : local!.info.name;
     const base = parse(sourceName).name.replace(/[^a-zA-Z0-9가-힣_-]/g, '-');
-      const options: SaveDialogOptions = {
-        title: 'MP4 내보내기',
-        defaultPath: `${base || 'shortfab'}-${Math.floor(request.start)}-${Math.floor(request.end)}.mp4`,
-        filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
-        properties: ['showOverwriteConfirmation'],
-      };
-      const chosen = mainWindow
-        ? await dialog.showSaveDialog(mainWindow, options)
-        : await dialog.showSaveDialog(options);
-      if (chosen.canceled || !chosen.filePath) return { status: 'cancelled' };
-      if (approved) await projects.renderableYouTubeSource(); // Recheck after save dialog.
-      let sourcePath = approved?.path ?? local?.path ?? '';
-      let ffmpegRequest = request;
-      if (direct) {
-        personalTask = new PersonalVideoTask();
-        const acquired = await personalTask.acquire(videoId!, activeClip.end, (progress) => {
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('render:progress', progress);
+    const options: SaveDialogOptions = {
+      title: 'MP4 내보내기',
+      defaultPath: activeParts.length > 1
+        ? `${base || 'shortfab'}-${activeParts.length}clips.mp4`
+        : `${base || 'shortfab'}-${Math.floor(request.start)}-${Math.floor(request.end)}.mp4`,
+      filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+      properties: ['showOverwriteConfirmation'],
+    };
+    const chosen = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, options)
+      : await dialog.showSaveDialog(options);
+    if (chosen.canceled || !chosen.filePath) return { status: 'cancelled' };
+    if (approved) await projects.renderableYouTubeSource(firstClip);
+    let sourcePath = approved?.path ?? local?.path ?? '';
+    let ffmpegRequests = segmentRequests;
+    if (direct) {
+      personalTask = new PersonalVideoTask();
+      const maxEnd = Math.max(...activeParts.map((part) => part.end));
+      const acquired = await personalTask.acquire(videoId!, maxEnd, (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('render:progress', progress);
+      });
+      if (personalTask === null) throw new Error('YouTube 가져오기가 취소되었습니다.');
+      sourcePath = acquired.path;
+      ffmpegRequests = segmentRequests.map((part) => validateRenderRequest(part, acquired.duration));
+    }
+    const path = chosen.filePath.toLowerCase().endsWith('.mp4') ? chosen.filePath : `${chosen.filePath}.mp4`;
+    const report = (progress: { seconds: number; percent: number }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('render:progress', {
+          ...progress, phase: 'render',
+          percent: direct ? 50 + Math.floor(progress.percent * 0.5) : progress.percent,
         });
-        if (personalTask === null) throw new Error('YouTube 가져오기가 취소되었습니다.');
-        sourcePath = acquired.path;
-        ffmpegRequest = validateRenderRequest(request, acquired.duration);
       }
+    };
+    if (activeParts.length === 1) {
       currentTask = new RenderTask();
-      const path = chosen.filePath.toLowerCase().endsWith('.mp4') ? chosen.filePath : `${chosen.filePath}.mp4`;
-      await currentTask.run(sourcePath, path, ffmpegRequest, (progress) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('render:progress', {
-            ...progress,
-            phase: 'render',
-            percent: direct ? 50 + Math.floor(progress.percent * 0.5) : progress.percent,
-          });
-        }
-      }, activeClip.subtitles ?? null, activeClip.layout ?? null, activeClip.narration ?? null);
-      await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end,
-        activeClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null,
-        JSON.stringify({ subtitles: activeClip.subtitles ?? null, narration: activeClip.narration ?? null }),
-        compositionStyleSignature(activeClip));
+      await currentTask.run(sourcePath, path, ffmpegRequests[0], report,
+        firstClip.subtitles ?? null, firstClip.layout ?? null, firstClip.narration ?? null);
+      await publisher.recordRender(path, projectId, firstClip.id, firstClip.start, firstClip.end,
+        firstClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null,
+        JSON.stringify({ subtitles: firstClip.subtitles ?? null, narration: firstClip.narration ?? null }),
+        compositionStyleSignature(firstClip));
+    } else {
+      currentTask = new CompositionTask();
+      await currentTask.run(sourcePath, path, activeParts.map((part, index) => ({
+        request: ffmpegRequests[index], subtitles: part.subtitles ?? null,
+        layout: part.layout ?? null, narration: part.narration ?? null,
+      })), report);
+      // A multi-part output needs an aggregate publish manifest/rights review.
+      // Do NOT attach a single-clip publishing authorization to a stitched MP4.
+    }
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
