@@ -372,7 +372,7 @@ export function WizardPanel(props: Props) {
     {step === 'layout' && <>
       <div className="wizard-insight">
         <strong>스타일을 직접 고르세요</strong>
-        <p>화면 구성과 자막 디자인을 하나로 묶은 스타일을 선택합니다. 스타일을 변경해도 대사와 타이밍은 유지됩니다.</p>
+        <p>화면 구성과 자막 디자인을 하나로 묶은 스타일을 선택합니다. 쇼츠 구성에 포함된 모든 장면에 동일한 스타일을 적용하고, 각 장면의 대사와 타이밍은 유지합니다.</p>
       </div>
       <div className="style-frame-actions">
         <button type="button" className="secondary" disabled={!clip || disabled}
