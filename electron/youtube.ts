@@ -6,6 +6,7 @@ import { request as httpsRequest } from 'node:https';
 import { basename, join } from 'node:path';
 import { app, safeStorage, shell } from 'electron';
 import type { ProjectClip } from '../src/shared/projects.js';
+import { layoutSignature } from '../src/shared/layout-styles.js';
 import {
   interpretYouTubeState, nextUploadOffset, validatePublishDraft,
   type PublishJobView, type PublishOverview, type PublishState,
@@ -361,7 +362,8 @@ export class YouTubePublisher {
         file.clipId !== selectedClip.id || file.start !== selectedClip.start ||
         file.end !== selectedClip.end || file.width !== selectedClip.width ||
         file.sourceBindingId !== sourceBindingId ||
-        file.subtitleSignature !== JSON.stringify(selectedClip.subtitles ?? null)) {
+        (file.subtitleSignature !== JSON.stringify(selectedClip.subtitles ?? null) ||
+          file.layoutSignature !== layoutSignature(selectedClip.layout))) {
         throw new Error('선택한 클립이 익스포트 후 수정되었습니다. MP4를 다시 익스포트해 주세요.');
       }
       const vault = await this.load();
