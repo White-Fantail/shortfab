@@ -1,11 +1,7 @@
-import { youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
+import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
 import type { SourceResolution, StoredMediaBinding } from './sources.js';
 
 export type ClipSource = 'local' | 'youtube';
-
-// Decimal tenths can round a valid 0.2-second interval slightly below 0.2.
-export const MIN_CLIP_SECONDS = 0.2;
-export const CLIP_TIME_EPSILON = 1e-6;
 
 export interface ProjectClip {
   source: ClipSource;

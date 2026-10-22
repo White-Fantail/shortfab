@@ -14,6 +14,9 @@ const good: StoredMediaBinding = {
 const reference = { videoId: 'abcdefghijk', url: 'https://youtu.be/abcdefghijk', durationSeconds: 120 };
 
 describe('YF-1 source and rights contracts', () => {
+  it('maps a decimal 0.2-second interval consistently with the editor', () => {
+    expect(mappedClipRange(1.1, 1.3, good)).toMatchObject({ start: 11.1, end: 11.3 });
+  });
   it('keeps missing input preview-only or source-link-required', () => {
     expect(resolveYouTubeSource({ ...reference, durationSeconds: null }, null, false).state).toBe('preview_only');
     expect(resolveYouTubeSource(reference, null, false).canRender).toBe(false);

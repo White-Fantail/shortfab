@@ -1,4 +1,4 @@
-import { youtubeVideoId } from './contracts.js';
+import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId } from './contracts.js';
 
 export type SourceState = 'preview_only' | 'source_link_required' | 'rights_review' |
   'ready_to_render' | 'source_lost' | 'blocked';
@@ -104,7 +104,7 @@ export function mappedClipRange(
   const mappedStart = start + binding.startOffsetSeconds;
   const mappedEnd = end + binding.startOffsetSeconds;
   if (![start, end, mappedStart, mappedEnd].every(Number.isFinite) ||
-      start < 0 || end - start < 0.2 ||
+      start < 0 || end - start < MIN_CLIP_SECONDS - CLIP_TIME_EPSILON ||
       mappedStart < 0 || mappedEnd > binding.durationSeconds + 0.02) {
     throw new Error('YouTube 구간이 연결된 원본 영상 범위를 벗어납니다.');
   }

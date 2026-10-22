@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { youtubeVideoId, type RenderProgress } from './shared/contracts';
+import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId, type RenderProgress } from './shared/contracts';
 import { YouTubePreview, type YouTubeControls } from './YouTubePreview';
 import {
-  CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, projectEditValidationError,
+  projectEditValidationError,
   type ProjectClip, type ProjectEdits, type ProjectSummary, type ProjectView,
 } from './shared/projects';
 import type { BindSourceRequest } from './shared/sources';

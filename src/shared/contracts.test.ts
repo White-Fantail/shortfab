@@ -16,6 +16,10 @@ describe('render contract', () => {
   ])('rejects an invalid request %j', (request) => {
     expect(() => validateRenderRequest(request, 60)).toThrow();
   });
+  it('renders decimal markers that are exactly 0.2 seconds apart', () => {
+    expect(validateRenderRequest({ sourceId: 'asset-1', start: 1.1, end: 1.3, width: 720 }, 60))
+      .toMatchObject({ start: 1.1, end: 1.3 });
+  });
   it('produces an exact 9:16 crop for both sizes', () => {
     expect(cropFilter(720)).toContain('crop=720:1280');
     expect(cropFilter(1080)).toContain('crop=1080:1920');

@@ -1,5 +1,9 @@
 export type OutputWidth = 720 | 1080;
 
+// Shared marker/render threshold: 1.3 - 1.1 is slightly less than 0.2 in JS.
+export const MIN_CLIP_SECONDS = 0.2;
+export const CLIP_TIME_EPSILON = 1e-6;
+
 export interface MediaInfo {
   id: string;
   name: string;
@@ -38,7 +42,7 @@ export function validateRenderRequest(value: unknown, duration: number): RenderR
     typeof start !== 'number' || !Number.isFinite(start) ||
     typeof end !== 'number' || !Number.isFinite(end) ||
     !Number.isFinite(duration) || duration <= 0 ||
-    start < 0 || end <= start || end - start < 0.2 ||
+    start < 0 || end <= start || end - start < MIN_CLIP_SECONDS - CLIP_TIME_EPSILON ||
     end > duration + 0.02
   ) {
     throw new Error('IN/OUT 구간을 다시 확인해 주세요.');
