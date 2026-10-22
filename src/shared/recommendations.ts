@@ -134,7 +134,7 @@ export function recommendClips(segments: TranscriptSegment[], duration: number,
     chosen.push(item);
     if (chosen.length >= Math.min(10, maximum)) break;
   }
-  return chosen.sort((a, b) => a.start - b.start).map((item, index) => ({
+  return chosen.map((item, index) => ({
     id: `${mode}-${Math.round(item.start * 100)}-${Math.round(item.end * 100)}`,
     start: Number(Math.max(0, item.start).toFixed(2)),
     end: Number(Math.min(duration, item.end).toFixed(2)),
