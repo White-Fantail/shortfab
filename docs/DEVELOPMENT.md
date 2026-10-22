@@ -155,3 +155,13 @@ macOS에서 `brew install yt-dlp ffmpeg` 설치 후 `npm run dev`로 시작합�
 - 기존 개인 YouTube URL을 열고 클립을 고른 뒤 자막 편집에서 언어 자동/ko/en을 선택하고 AI 자동 자막 생성. 완료 후 각 구간이 **클립 IN을 0초로** 표시하는지, 수동 수정·스타일·MP4 번인이 되는지 확인하세요.
 - 기존 자막 교체 취소, 인식 중 취소, CLI/모델 누락, 오디오가 없는 영상, 10분 초과, 자막 30개 초과, 파일 크기·임시 파일 정리를 별도 시험합니다.
 - 단위: `src/shared/stt.test.ts`; 합성 FFmpeg→fake whisper SRT 통합: `electron/stt.test.ts`; 모델 설치·검증·캐시·취소: `electron/stt-model-download.test.ts`. **실제 음성 Whisper 모델 정확도/OS 실기 수용은 자동 합성 테스트와 분리**합니다.
+
+
+## AG1 · Guided Wizard 실기 체크 (2026-10-22 dev)
+
+- 신규 프로젝트: 기본 '단계별 제작'에서 YouTube URL 입력 → 플레이어 길이 갱신 → 원본 승인 → 클립 단계 이동.
+- 영상 재생 위치에서 수동 클립 추가 → IN/OUT·제목 수정 → 승인 후 03 화면(9:16 중앙 크롭), 04 자막, 05 원본 소리, 06 CTA OFF, 07 검토, 08 MP4 출력.
+- 상단 8단계는 이전 승인/건너뛰기 게이트를 지키고, '다시 생성'은 AI 공급자 미구현으로 비활성화여야 합니다.
+- 고급 편집 왕복 시 같은 클립·자막·해상도가 유지되는지, 클립 구간/자막 변경 후 관련 단계만 '다시 확인'이 되는지 재검증합니다.
+- 종료/재시작으로 현재 단계·다중 클립 각각의 승인 상태를 재열기 하고 과거 schemaVersion 1 프로젝트 JSON도 열리는지 확인합니다.
+- CI: `npm run check && npm run lint && npm test && npm run build`; 추가 단위 테스트 `src/shared/wizard.test.ts`. 앱 자체 조작·YouTube 네트워크·Mac/Windows 설치 테스트 결과는 **별도 기록**합니다.
