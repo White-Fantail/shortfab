@@ -22,6 +22,25 @@ export interface PersonalDownloadProgress {
   phase: 'download';
 }
 
+/** Used only to display installation guidance; does not download or install executables. */
+export async function personalDownloaderAvailable(): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const child = spawn(binary(), ['--version'], {
+      windowsHide: true, env: { ...process.env, PATH: safePath() },
+    });
+    let finished = false;
+    const finish = (ok: boolean) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const timer = setTimeout(() => { child.kill(); finish(false); }, 5000);
+    child.on('error', () => finish(false));
+    child.on('close', (code) => finish(code === 0));
+  });
+}
+
 export class PersonalVideoTask {
   private child: ChildProcessWithoutNullStreams | null = null;
   private cancelled = false;
