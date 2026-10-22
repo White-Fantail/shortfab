@@ -314,3 +314,32 @@
   .wizard-workspace .preview-area { min-height:420px; }
   .wizard-panel { overflow:visible; border-right:0; }
 }
+
+/* AG2: guided clip recommendations and analysis progress. */
+.wizard-analysis-controls { display:flex; flex-direction:column; gap:10px; margin:18px 0 25px; }
+.wizard-analysis-controls label { font-size:12px; }
+.wizard-analysis-controls select { width:100%; min-height:40px; padding:8px 10px; background:#242633; color:#fff; border:1px solid #414457; border-radius:8px; }
+.wizard-analysis-controls .progress-head { line-height:1.45; gap:15px; margin-top:8px; }
+.wizard-analysis-controls .progress-head span { max-width:80%; font-size:11px; }
+.wizard-analysis-controls .progress-track { margin:0 0 5px; }
+.wizard-analysis-controls .secondary { margin:0; }
+.wizard-recommend-heading { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:20px 0 12px; }
+.wizard-recommend-heading strong { font-size:14px; }
+.wizard-recommend-heading small { font-size:11px; color:#afb1c1; }
+.wizard-rerank { display:flex; flex-wrap:wrap; gap:6px; margin:14px 0; }
+.wizard-rerank button { font-size:11px; padding:8px 10px; }
+.wizard-rerank button.selected { border-color:#b69cf0; background:#42345a; }
+.wizard-suggestion-list { display:grid; gap:10px; margin:12px 0 16px; }
+.wizard-suggestion-card { border:1px solid #434358; background:#232634; border-radius:12px; padding:15px; overflow-wrap:anywhere; }
+.wizard-suggestion-select { display:flex; align-items:flex-start; gap:10px; font-size:12px; line-height:1.55; color:#fff; cursor:pointer; }
+.wizard-suggestion-select input { accent-color:#a785f5; flex:0 0 auto; width:17px; height:17px; min-height:0; margin-top:1px; }
+.wizard-suggestion-select strong { font-size:13px; }
+.wizard-suggestion-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; }
+.wizard-suggestion-meta span { color:#d5c5f4; font-size:11px; }
+.wizard-suggestion-meta button { font-size:11px; padding:7px 10px; white-space:nowrap; }
+.wizard-transcript { font-size:12px; line-height:1.65; color:#e0dfed; background:#181c27; border-radius:7px; padding:10px 12px; max-height:130px; overflow-y:auto; margin:10px 0; }
+.wizard-suggestion-card .hint { margin-bottom:0; }
+@media (max-width:650px) {
+  .wizard-suggestion-meta { align-items:flex-start; flex-direction:column; gap:6px; }
+  .wizard-rerank button { flex:1 0 44%; }
+}
