@@ -270,7 +270,7 @@ function App() {
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
     const old = draftRef.current;
-    if (!old || publishingBusy || analysisBusy) return;
+    if (!old || publishingBusy) return;
     const candidate = update(old);
     if (candidate === old) return;
     const next = { ...candidate, wizard: reconcileWizard(candidate.wizard, old, candidate) };
