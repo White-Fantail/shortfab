@@ -1,7 +1,7 @@
 import type { ProjectClip, ProjectEdits } from './shared/projects';
 import { StyleGallery } from './StyleGallery';
 import { layoutDefault, validateLayout, type LayoutStyleId } from './shared/layout-styles';
-import type { SubtitlePreset } from './shared/subtitles';
+import type { SubtitleCue, SubtitlePreset, SubtitleTrack } from './shared/subtitles';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
 import type { SttLanguage, SttStatus } from './shared/stt';
@@ -64,6 +64,15 @@ type Props = {
   onRender: () => void;
   onCancelRender: () => void;
   onTranscribe: () => void;
+  onImportCaptions: () => void;
+  hasCachedTranscript: boolean;
+  onSuggestDecorations: () => void;
+  captionDraftMessage: string;
+  sttMessage: string;
+  onSeekCaption: (seconds: number) => void;
+  onUpdateCaption: (id: string, patch: Partial<SubtitleCue>) => void;
+  onRemoveCaption: (id: string) => void;
+  onAddCaption: () => void;
   onInstallModel: () => void;
 };
 
@@ -107,7 +116,7 @@ export function WizardPanel(props: Props) {
       fields.clipId = clip.id;
       if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; }
       if (step === 'layout') { fields.width = clip.width; fields.style = validateLayout(clip.layout).id; fields.focus = validateLayout(clip.layout).focus; }
-      if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; }
+      if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; fields.hook = !!clip.subtitles?.hook; fields.emphasisCount = clip.subtitles?.cues.filter(item => item.emphasis).length ?? 0; }
       if (step === 'audio') fields.originalAudio = true;
       if (step === 'cta') fields.enabled = false;
       if (step === 'review') fields.manualComposition = true;
@@ -284,28 +293,109 @@ export function WizardPanel(props: Props) {
 
     {step === 'subtitles' && <>
       <div className="wizard-insight">
-        <strong>자막 스타일을 비교해 고르세요</strong>
-        <p>4개의 자막 스타일을 좌우로 넘겨 보고 선택하세요. 이미 인식하거나 수정한 자막 문장과 타임코드는 스타일을 바꿔도 그대로 보존합니다.</p>
+        <strong>자막 스타일을 비교하고 직접 고르세요</strong>
+        <p>8개 카드 중 하나를 선택하고, 아래에서 대사·타임코드·강조·Hook을 수정하세요. 다른 스타일을 골라도 내용은 그대로입니다.</p>
       </div>
       <div className="style-frame-actions">
-        <button type="button" className="secondary" disabled={!clip || disabled}
-          onClick={props.onLoadFrame}>{props.frameImage ? '선택 클립 프레임 새로 가져오기' : '선택 클립의 실제 프레임으로 비교'}</button>
-        {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>프레임 불러오기 취소</button>}
+        <button type="button" className="secondary" disabled={!clip || disabled} onClick={props.onLoadFrame}>
+          {props.frameImage ? '실제 클립 프레임 새로 가져오기' : '실제 클립 프레임에서 비교'}</button>
+        {props.frameBusy && <button type="button" className="cancel" onClick={props.onCancelFrame}>불러오기 취소</button>}
         {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
       </div>
       <StyleGallery kind="subtitle" videoId={youtubeId} frameImage={props.frameImage}
-        selected={clip?.subtitles?.preset ?? 'classic'}
-        sampleText={clip?.subtitles?.cues[0]?.text} disabled={!clip || disabled}
-        onChoose={(id) => clip && props.onClip({
-          subtitles: { preset: id as SubtitlePreset, cues: clip.subtitles?.cues ?? [] },
-        })} />
-      <p className="hint">{clip?.subtitles?.cues.length ?? 0}개 자막 · 실제 MP4에는 인식/입력된 자막만 합성합니다. 예시 문구는 출력하지 않습니다.</p>
-      <button type="button" className="primary full"
-        disabled={!clip || !validClip || !!validationError || disabled || sttBusy || !sttSetup?.engineAvailable || !sttSetup?.modelAvailable}
-        onClick={props.onTranscribe}>{sttBusy ? '자동 자막 생성 중…' : '로컬 음성 인식으로 자막 생성'}</button>
-      {!sttSetup?.modelAvailable && <button type="button" className="secondary full"
-        disabled={disabled} onClick={props.onInstallModel}>기본 다국어 모델 설치</button>}
-      <button type="button" className="secondary full" onClick={props.onAdvanced}>문장·타임코드·자막 스타일 수정 (고급 편집)</button>
+        selected={clip?.subtitles?.preset ?? 'classic'} sampleText={clip?.subtitles?.cues[0]?.text}
+        disabled={!clip || disabled}
+        onChoose={id => clip && props.onClip({ subtitles: {
+          ...(clip.subtitles ?? { preset: 'classic', cues: [] }), preset: id as SubtitlePreset,
+        } })} />
+      <div className="wizard-caption-methods">
+        <button type="button" className="primary full" disabled={!clip || disabled || sttBusy ||
+          !validClip || !!validationError || !props.hasCachedTranscript} onClick={props.onImportCaptions}>
+          AG2에서 분석한 실제 대사로 자막 만들기</button>
+        <button type="button" className="secondary full" disabled={!clip || disabled || sttBusy ||
+          !validClip || !!validationError || !sttSetup?.engineAvailable || !sttSetup.modelAvailable}
+          onClick={props.onTranscribe}>{sttBusy ? '음성 인식 중…' : 'Whisper로 현재 클립 새로 전사'}</button>
+        {sttBusy && <button type="button" className="cancel full"
+          onClick={() => void window.shortfab?.cancelTranscription()}>음성 인식 취소</button>}
+        {!sttSetup?.modelAvailable && <button type="button" className="secondary full"
+          disabled={disabled} onClick={props.onInstallModel}>기본 다국어 Whisper 모델 설치</button>}
+        {props.captionDraftMessage && <p role="status" className="hint">{props.captionDraftMessage}</p>}
+        {props.sttMessage && <p role="status" className="hint">{props.sttMessage}</p>}
+      </div>
+
+      <section className="wizard-caption-edit" aria-label="문장 및 타임코드">
+        <div className="wizard-caption-edit-title">
+          <strong>문장·타임코드 교정</strong>
+          <button type="button" disabled={!clip || disabled || (clip.subtitles?.cues.length ?? 0) >= 30}
+            onClick={props.onAddCaption}>+ 직접 추가</button>
+        </div>
+        {!clip?.subtitles?.cues.length && <p className="hint">먼저 분석 대사를 가져오거나 Whisper로 인식하세요. 직접 추가도 가능합니다.</p>}
+        {(clip?.subtitles?.cues ?? []).map((cue, index) => <div className="wizard-caption-row" key={cue.id}>
+          <div className="wizard-caption-row-head">
+            <strong>{index + 1} · {time(cue.start)}–{time(cue.end)}</strong>
+            <div>
+              <button type="button" disabled={disabled} onClick={() =>
+                clip && props.onSeekCaption(clip.start + cue.start)}>▶ 듣기</button>
+              <button type="button" disabled={disabled} onClick={() => props.onRemoveCaption(cue.id)}>삭제</button>
+            </div>
+          </div>
+          <textarea rows={2} maxLength={100} disabled={disabled}
+            aria-label={`자막 ${index + 1} 문장`} value={cue.text}
+            onChange={event => props.onUpdateCaption(cue.id, { text: event.target.value })} />
+          <div className="wizard-caption-timings">
+            <label>IN 초<input type="number" min={0} step={0.1} disabled={disabled}
+              value={cue.start} onChange={event =>
+                props.onUpdateCaption(cue.id, { start: Number(event.target.value) })} /></label>
+            <label>OUT 초<input type="number" min={0} max={clip ? clip.end - clip.start : undefined}
+              step={0.1} disabled={disabled} value={cue.end} onChange={event =>
+                props.onUpdateCaption(cue.id, { end: Number(event.target.value) })} /></label>
+            <label className="wizard-caption-emphasis"><input type="checkbox" disabled={disabled}
+              checked={cue.emphasis ?? false} onChange={event =>
+                props.onUpdateCaption(cue.id, { emphasis: event.target.checked })} /> 강조</label>
+          </div>
+        </div>)}
+      </section>
+
+      <section className="wizard-caption-hook">
+        <div className="wizard-caption-edit-title">
+          <strong>Hook 오버레이 (선택)</strong>
+          <button type="button" disabled={!clip || disabled || !clip.subtitles?.cues.length ||
+            clip.end - clip.start < 0.5} onClick={props.onSuggestDecorations}>실제 대사에서 Hook·강조 제안</button>
+        </div>
+        <p className="hint">최초 0~5초 상단에 표시하며, 다른 자막과 독립적으로 출력됩니다. 제안 문구는 실제 전사에 나온 표현입니다.</p>
+        <label className="wizard-hook-switch"><input type="checkbox" disabled={!clip || disabled ||
+          (!!clip && clip.end - clip.start < 0.5)} checked={!!clip?.subtitles?.hook}
+          onChange={event => clip && props.onClip({ subtitles: {
+            ...(clip.subtitles ?? { preset: 'classic' as const, cues: [] }),
+            hook: event.target.checked ? {
+              text: clip.subtitles?.cues[0]?.text.slice(0, 64) || 'Hook 문구',
+              duration: Math.min(3, clip.end - clip.start), style: 'banner',
+            } : null,
+          } })} /> Hook 표시</label>
+        {clip?.subtitles?.hook && <>
+          <label htmlFor="wizard-hook-text">Hook 문구 (1~64자)</label>
+          <input id="wizard-hook-text" maxLength={64} disabled={disabled}
+            value={clip.subtitles.hook.text} onChange={event =>
+              props.onClip({ subtitles: { ...clip.subtitles!, hook: {
+                ...clip.subtitles!.hook!, text: event.target.value,
+              } } })} />
+          <div className="wizard-caption-timings">
+            <label>표시 시간 (초)<input type="number" min={0.5} max={Math.min(5, clip.end - clip.start)}
+              step={0.1} disabled={disabled} value={clip.subtitles.hook.duration}
+              onChange={event => props.onClip({ subtitles: { ...clip.subtitles!, hook: {
+                ...clip.subtitles!.hook!, duration: Number(event.target.value),
+              } } })} /></label>
+            <label>Hook 디자인<select disabled={disabled} value={clip.subtitles.hook.style}
+              onChange={event => props.onClip({ subtitles: { ...clip.subtitles!, hook: {
+                ...clip.subtitles!.hook!, style: event.target.value as NonNullable<SubtitleTrack['hook']>['style'],
+              } } })}>
+              <option value="banner">상단 배경 박스</option><option value="simple">상단 강조 글씨</option>
+            </select></label>
+          </div>
+        </>}
+      </section>
+      <button type="button" className="secondary full" disabled={disabled} onClick={props.onAdvanced}>
+        기타 자막 편집 · 고급 모드</button>
     </>}
 
     {step === 'audio' && <div className="wizard-insight">
