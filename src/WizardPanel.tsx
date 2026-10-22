@@ -1,7 +1,8 @@
 import type { ProjectClip, ProjectEdits } from './shared/projects';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
-import type { SttStatus } from './shared/stt';
+import type { SttLanguage, SttStatus } from './shared/stt';
+import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
 
 export const WIZARD_LABELS: Record<WizardStep, string> = {
   source: '원본', clips: '클립', layout: '화면', subtitles: '자막',
@@ -19,6 +20,18 @@ const time = (seconds: number) => {
 
 type Props = {
   wizard: WizardRecord;
+  analysis: ClipAnalysis | null;
+  analysisBusy: boolean;
+  analysisProgress: AnalyzeProgress | null;
+  analysisError: string;
+  analysisLanguage: SttLanguage;
+  onAnalysisLanguage: (language: SttLanguage) => void;
+  onAnalyze: (mode: RecommendationMode, refresh: boolean) => void;
+  onCancelAnalysis: () => void;
+  selectedRecommendationIds: string[];
+  onToggleRecommendation: (id: string) => void;
+  onPreviewRecommendation: (candidate: ClipRecommendation) => void;
+  onAddRecommendations: () => void;
   draft: ProjectEdits;
   clip: ProjectClip | null;
   sourceDuration: number | null;
@@ -74,7 +87,7 @@ export function WizardPanel(props: Props) {
   const currentIndex = WIZARD_STEPS.indexOf(step);
   const next = WIZARD_STEPS[currentIndex + 1];
   const clips = draft.clips.filter((item) => item.source === 'youtube');
-  const disabled = busy || rendering;
+  const disabled = busy || rendering || props.analysisBusy;
   const sourceValid = Boolean(youtubeId && sourceDuration !== null && sourceDuration > 0);
   const canAccept = step === 'source' ? sourceValid :
     Boolean(clip && validClip && !validationError);
@@ -113,18 +126,86 @@ export function WizardPanel(props: Props) {
         <strong>{sourceValid ? '✓ 영상 길이 확인' : '영상 정보 확인 대기'}</strong>
         <p>{sourceValid ? `영상 길이 ${time(sourceDuration!)} · 원본 YouTube 플레이어에서 재생할 수 있습니다.` :
           '링크를 넣으면 오른쪽에서 원본을 확인할 수 있습니다. 영상 길이를 불러온 뒤 다음 단계로 이동하세요.'}</p>
-        <small>현재는 원본 탐색을 지원합니다. 전사·장면 자동 분석은 AG2에서 추가됩니다.</small>
+        <small>원본을 확인하고 다음 단계에서 로컬 음성 분석·추천 후보를 생성할 수 있습니다. Whisper 모델과 yt-dlp가 준비되어 있어야 합니다.</small>
       </div>
       <p className="hint">개인용 MP4 익스포트에는 yt-dlp와 FFmpeg가 필요합니다. 원본 사용 권리와 플랫폼 약관은 별도로 확인하세요.</p>
     </>}
 
     {step === 'clips' && <>
       <div className="wizard-insight">
-        <strong>클립 직접 선택 · AI 추천 준비 중</strong>
-        <p>AG2에서 영상 분석으로 자동 후보를 추천합니다. 지금은 오른쪽 플레이어에서 원하는 장면을 찾고 구간을 저장할 수 있습니다.</p>
+        <strong>원본 대사 분석 → 클립 자동 추천</strong>
+        <p>Whisper.cpp로 실제 음성을 로컬 전사한 뒤 문장 경계·질문·대사 밀도를 기준으로 쇼츠 후보를 추천합니다. 인기 점수나 인물 인식은 제공하지 않습니다.</p>
+        {sourceDuration !== null && sourceDuration > 3600 &&
+          <small>길이가 긴 영상은 최초 60분까지만 분석합니다. 나머지는 수동 탐색을 이용하세요.</small>}
       </div>
-      <button className="primary full" type="button" disabled={disabled || !sourceValid || clips.length >= 100}
-        onClick={props.onAddClip}>+ 현재 재생 위치에서 30초 클립 만들기</button>
+      <div className="wizard-analysis-controls">
+        <label htmlFor="analysis-language">음성 언어</label>
+        <select id="analysis-language" value={props.analysisLanguage} disabled={disabled}
+          onChange={(event) => props.onAnalysisLanguage(event.target.value as SttLanguage)}>
+          <option value="auto">자동 감지</option>
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+        </select>
+        <button className="primary full" type="button" disabled={disabled || !sourceValid ||
+          !sttSetup?.engineAvailable || !sttSetup.modelAvailable}
+          onClick={() => props.onAnalyze('balanced', false)}>
+          {props.analysisBusy ? '실제 음성 분석 중…' : props.analysis ? '저장된 음성으로 다시 추천' : 'AI 음성 분석 · 클립 자동 추천'}
+        </button>
+        {props.analysisBusy && <>
+          <div className="progress-head"><span>{props.analysisProgress?.message ?? '분석 준비 중…'}</span>
+            <strong>{props.analysisProgress?.percent ?? 0}%</strong></div>
+          <div className="progress-track"><div style={{ width: `${props.analysisProgress?.percent ?? 0}%` }} /></div>
+          <button type="button" className="cancel full" onClick={props.onCancelAnalysis}>분석 취소</button>
+        </>}
+        {(!sttSetup?.engineAvailable || !sttSetup?.modelAvailable) && <>
+          <p className="hint">로컬 Whisper.cpp와 다국어 GGML 모델이 필요합니다. Mac: <code>brew install whisper.cpp ffmpeg yt-dlp</code>. 영상/대사 내용은 외부 AI 서비스로 전송하지 않습니다.</p>
+          {!sttSetup?.modelAvailable && <button type="button" className="secondary full" disabled={disabled}
+            onClick={props.onInstallModel}>기본 Whisper 다국어 모델 설치</button>}
+        </>}
+        {props.analysisError && <p className="warning" role="alert">{props.analysisError}</p>}
+      </div>
+      {props.analysis && <>
+        <div className="wizard-recommend-heading">
+          <strong>{props.analysis.candidates.length}개 대사 기반 추천 후보</strong>
+          <small>{props.analysis.analyzedSeconds < props.analysis.duration ?
+            '최초 60분 분석' : '원본 분석'} · {props.analysis.segments.length}개 전사 구간 · {props.analysis.language}</small>
+        </div>
+        {props.analysis.note && <p className="hint">{props.analysis.note}</p>}
+        {!!props.analysis.candidates.length && <>
+          <div className="wizard-rerank">
+            <button type="button" disabled={disabled} className={props.analysis.mode === 'balanced' ? 'selected' : ''}
+              onClick={() => props.onAnalyze('balanced', false)}>추천 다시 보기</button>
+            <button type="button" disabled={disabled} className={props.analysis.mode === 'shorter' ? 'selected' : ''}
+              onClick={() => props.onAnalyze('shorter', false)}>더 짧게</button>
+            <button type="button" disabled={disabled} className={props.analysis.mode === 'energetic' ? 'selected' : ''}
+              onClick={() => props.onAnalyze('energetic', false)}>더 역동적으로</button>
+            <button type="button" disabled={disabled} onClick={() => props.onAnalyze(props.analysis!.mode, true)}>원본 재분석</button>
+          </div>
+          <div className="wizard-suggestion-list" aria-label="자동 추천된 클립 후보">
+            {props.analysis.candidates.map((candidate, index) => <article key={candidate.id} className="wizard-suggestion-card">
+              <label className="wizard-suggestion-select">
+                <input type="checkbox" disabled={disabled} checked={props.selectedRecommendationIds.includes(candidate.id)}
+                  onChange={() => props.onToggleRecommendation(candidate.id)} />
+                <strong>추천 {index + 1} · {candidate.title}</strong>
+              </label>
+              <div className="wizard-suggestion-meta">
+                <span>{time(candidate.start)} – {time(candidate.end)} · {time(candidate.end - candidate.start)}</span>
+                <button type="button" disabled={disabled} onClick={() => props.onPreviewRecommendation(candidate)}>▶ 이 구간 보기</button>
+              </div>
+              <p className="wizard-transcript">“{candidate.transcript}”</p>
+              <p className="hint">추천 이유: {candidate.reason}</p>
+            </article>)}
+          </div>
+          <button type="button" className="primary full" disabled={disabled || !props.selectedRecommendationIds.length ||
+            clips.length >= 100} onClick={props.onAddRecommendations}>
+            선택한 {props.selectedRecommendationIds.length}개 후보를 클립으로 추가
+          </button>
+        </>}
+      </>}
+      <div className="section-rule" />
+      <p className="eyebrow">직접 선택 (분석 실패·무음 영상 대안)</p>
+      <button className="secondary full" type="button" disabled={disabled || !sourceValid || clips.length >= 100}
+        onClick={props.onAddClip}>+ 현재 재생 위치에서 수동 클립 만들기</button>
       <div className="wizard-clip-list" aria-label="선택 가능한 클립">
         {clips.map((item) => <button key={item.id} type="button"
           className={`wizard-clip-card ${item.id === clip?.id ? 'active' : ''}`}
@@ -212,7 +293,7 @@ export function WizardPanel(props: Props) {
     <div className="wizard-footer">
       {currentIndex > 0 && <button type="button" disabled={disabled} onClick={() => navigate(WIZARD_STEPS[currentIndex - 1])}>← 이전</button>}
       <button type="button" className="wizard-advanced" disabled={disabled} onClick={props.onAdvanced}>조금 수정 · 고급 편집</button>
-      {step !== 'export' && <button type="button" title="AI 자동 제안은 다음 단계에서 추가됩니다." disabled>다시 생성 · 준비 중</button>}
+      {step !== 'export' && step !== 'clips' && <button type="button" title="이 단계의 자동 추천은 후속 개발 예정입니다." disabled>다시 생성 · 준비 중</button>}
       {step !== 'export' && <>
         {optional.has(step) && <button type="button" disabled={!canAccept || disabled}
           onClick={() => approve(true)}>건너뛰기</button>}
@@ -222,6 +303,6 @@ export function WizardPanel(props: Props) {
         </button>
       </>}
     </div>
-    <p className="wizard-generate-note">AI 다시 생성: 이 단계의 자동 추천기가 아직 연결되지 않았습니다. 승인한 수정값은 자동으로 덮어쓰지 않습니다.</p>
+    <p className="wizard-generate-note">{step === 'clips' ? '추천은 실제 Whisper 전사와 로컬 휴리스틱으로 생성됩니다. 이미 채택·수정한 클립은 재추천해도 유지됩니다.' : '이 단계의 AI 자동 추천은 후속 개발 예정입니다. 승인한 사용자 수정값은 덮어쓰지 않습니다.'}</p>
   </section>;
 }
