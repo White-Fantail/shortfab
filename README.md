@@ -4,16 +4,16 @@
 
 ShortFab은 **이미 YouTube에 올라온 긴 영상의 URL을 붙여넣고**, 의미 있는 구간을 찾아 자막·나레이션·CTA로 새로운 숏폼을 구성하는 **YouTube-first 클리핑 제작 도구**입니다. 핵심 사용자는 **직접 영상을 촬영하거나 원본 MP4를 보유하지 않습니다**. 적법한 렌더 소스 확보가 가장 중요한 기술 과제입니다.
 
-> **현재 단계 (2026-10-22):** YouTube URL 탐색(YF-0), 권리자 로컬·허용 HTTPS 원본(YF-1), Ed25519 서명 파트너 카탈로그의 videoId 기반 자동 연결(YF-2 코드)을 `dev`에 구현했습니다. CI 타입 검사·테스트·빌드 통과. 승인된 **실제 파트너 API/영상 콘텐츠 일치/라이선스 철회/OS 패키징 및 실영상 3개 MP4 시험은 미완료**입니다. 자막/TTS/CTA는 후속 단계입니다.
+> **현재 단계 (2026-10-22):** 개인용 로컬 YouTube 링크→클립 MP4 직접 출력 기능을 `dev`에 추가했습니다. yt-dlp 공개 영상 다운로드 → 로컬 캐시 → 기존 FFmpeg 구간/세로형 렌더 경로가 연결됐고 CI 오프라인 테스트를 통과했습니다. **실제 YouTube 네트워크 다운로드·Mac/Windows 실기 검증은 미완료**입니다. 기존 YF-1 승인 원본·YF-2 서명 파트너 연결은 고급 옵션으로 유지됩니다.
 
 ## 목표 사용자 흐름
 
 `YouTube URL 붙여넣기 → 공식 플레이어에서 탐색·구간 후보 저장 → 권한 있는 원본 자동 확보/연결 → 숏폼 구성·스타일 → MP4 익스포트 → 사용자 승인 후 게시`
 
-**남은 핵심 과제:** 실제 사용 허가를 받은 파트너 카탈로그/원본을 연결한 E2E 시험, 영상 동일성 독립 확인, 재게시 권한 철회·키 회전 감지 및 실제 3개 MP4 출력 검증. 현재 일반 공개 YouTube URL을 범용으로 다운로드/렌더링하지 않습니다.
+**남은 핵심 과제:** YouTube 공개 영상 다운로드의 실제 Mac/Windows 실기 검증, 런타임 도구 설치 경험, 캐시 관리, 자막·TTS·CTA·스타일 및 영상 이용 권리·플랫폼 약관 확인. 공식 YouTube API가 범용 동영상 파일 다운로드를 제공하는 것은 아닙니다.
 
 - **로컬 우선 데스크톱 + 선택적 클라우드**: 편집·렌더는 로컬 우선, AI·프리셋 카탈로그·SNS 연결은 필요할 때 클라우드 사용. Phase 0·1 프로토타입은 Electron/React/TypeScript로 구축하며 최종 제품 스택 결정은 패키징·성능 검증 이후 확정합니다.
-- **YouTube URL이 1차 소스**: 링크로 구간을 찾고 후보를 저장하는 경험을 우선 개발합니다. 공식 YouTube API는 임의 영상 다운로드를 허용하지 않으므로, 실제 MP4는 **권리자 제공 파일·파트너/승인 저장소·기타 적법한 원본**과 영상 ID를 자동 연결하는 `SourceResolver` 경로를 우선합니다. 일반 공개 URL의 범용 MP4 변환을 지원한다고 오해시키지 않습니다.
+- **YouTube URL이 1차 소스**: 개인용 데스크톱에서는 yt-dlp CLI가 설치돼 있고 영상이 공개 접근 가능한 경우 URL로부터 원본 미디어를 가져와 9:16 클립 MP4로 출력할 수 있습니다. 서명된 파트너 원본·수동 파일 연결도 선택 가능합니다. 개인용을 이유로 저작권·서비스 약관/다운로드·재게시 권한이 자동 허용된다고 판단하지 않습니다.
 - **동적 스타일 라이브러리 (Trend Studio)**: 자막·모션·나레이션·음악/효과음·CTA를 조합하는 선언형 버전 프리셋을 원격 추가할 수 있게 설계합니다. 무단 미디어 수집이나 실행 코드 배포에 의존하지 않습니다.
 - **CTA Studio**: 영상 끝의 텍스트/애니메이션 오버레이, 엔드카드, 음성 CTA를 편집하며 플랫폼별 문구와 안전 영역을 다룹니다.
 - **명시적인 게시 승인**: MP4 생성과 YouTube 게시를 별도 작업으로 분리하고 OS 승인 대화상자를 표시합니다. Google API 연결 전에는 MP4 수동 업로드를 사용합니다.
@@ -27,11 +27,13 @@ ShortFab은 **이미 YouTube에 올라온 긴 영상의 URL을 붙여넣고**, �
 | [아키텍처·데이터](docs/ARCHITECTURE.md) | 데스크톱/로컬 워커/클라우드 경계, 도메인 모델, 데이터 흐름 |
 | [Trend Studio](docs/TREND_STUDIO.md) | 트렌드 탐색, 스타일 생성·검증·원격 배포, 버전 고정 |
 | [CTA Studio](docs/CTA_STUDIO.md) | CTA 유형·설정·렌더링·플랫폼별 안전 영역 |
+| [개인용 YouTube 직접 MP4 출력](docs/PERSONAL_YOUTUBE_EXPORT.md) | 설치·URL→클립 흐름, 캐시, 다운로드 제한 및 테스트 |
 | [YouTube-first 구현 조사](docs/YOUTUBE_FIRST_WORKFLOW.md) | **최우선 제품 흐름**, 공식/비공식 취득 방법, SourceResolver, 권리·출시 게이트 |
 | [입력·플랫폼 정책](docs/SOURCES_AND_PUBLISHING.md) | YouTube 링크 제한, 미디어 권리, SNS 게시 API 원칙 |
 | [Phase 2 YouTube 업로드](docs/PHASE2_YOUTUBE.md) | Google OAuth 연결, 보안 저장소, 공식 업로드/재시도, 운영·검증 |
 | [로드맵·완료 기준](docs/ROADMAP.md) | P0/P1/P2 범위, 작업 순서, 수용 테스트 |
 | [기술 의사결정](docs/adr/0001-local-first-hybrid.md) | 선택 사항과 기술 검증을 구분한 최초 ADR |
+| [개인용 직접 클리핑 결정 ADR](docs/adr/0003-personal-youtube-clipping.md) | 개인용 CLI 경로와 독립 게시 권한 검증 |
 | [YouTube 소스 전략 ADR](docs/adr/0002-youtube-first-source-acquisition.md) | YouTube URL 우선, 렌더 소스 취득 경계와 대안 |
 | [로컬 개발·검증](docs/DEVELOPMENT.md) | 실행, FFmpeg 설치, 현재 범위, 검증 방법 |
 | [개발 에이전트 규칙](AGENTS.md) | 브랜치, 구현 원칙, 변경 시 문서 관리 |
@@ -40,7 +42,7 @@ ShortFab은 **이미 YouTube에 올라온 긴 영상의 URL을 붙여넣고**, �
 
 - **새 프로젝트의 시작 탭은 YouTube**입니다. HTTPS YouTube 동영상 URL을 붙여넣고 공식 IFrame 플레이어에서 재생/구간 이동/IN·OUT을 지정할 수 있습니다. YouTube 동영상 길이를 확인한 후 **후보 추가**로 최대 100개의 클립(로컬 클립 포함)을 저장할 수 있으며 선택 구간 반복도 지원합니다.
 - 후보는 `source: youtube`로 프로젝트에 저장되므로 로컬 원본을 연결하지 않아도 앱을 다시 열어 편집을 계속할 수 있습니다. 로컬 파일 클립은 별도 `source: local`로 유지합니다.
-- **PREVIEW ONLY** 상태에서는 허가된 원본 연결 전 MP4 익스포트를 할 수 없습니다. 로컬 승인 파일(YF-1), 직접 HTTPS 원본(YF-1), 서명된 파트너 카탈로그 자동 연결(YF-2 코드) 중 이용 가능한 경로로 소스를 확보해야 합니다.
+- **클립 직접 출력**: YouTube 영상의 IN/OUT 후보를 저장하고 **MP4 익스포트**를 누르면 yt-dlp 공개 미디어 가져오기 및 FFmpeg 세로형 렌더를 실행합니다. 도구가 없으면 설치 안내를 표시하며, 비공개·DRM·접근 제한 영상은 지원하지 않습니다.
 
 ## 화면 구성 · Phase 2 컴팩트 워크스페이스
 
@@ -70,7 +72,7 @@ npm install
 npm run dev
 ```
 
-개발 기기에서 `ffmpeg`와 `ffprobe` 명령이 PATH에 있어야 합니다. 앱의 **로컬 파일 → 영상 선택 → IN/OUT → MP4 내보내기**를 사용해 보세요. `npm run check`, `npm run lint`, `npm test`, `npm run build`도 제공됩니다. 상세한 설치·제약사항은 [DEVELOPMENT.md](docs/DEVELOPMENT.md)를 참고하세요.
+Mac에서는 먼저 `brew install yt-dlp ffmpeg`를 실행합니다. YouTube 링크를 입력하고 구간을 선택한 후 **MP4 익스포트**를 누르세요. 로컬 파일 입력도 유지됩니다. yt-dlp, ffmpeg 및 ffprobe를 실행할 수 있어야 합니다. `npm run check`, `npm run lint`, `npm test`, `npm run build`도 제공됩니다. 상세한 설치·제약사항은 [DEVELOPMENT.md](docs/DEVELOPMENT.md)를 참고하세요.
 
 프로젝트는 앱 사용자 데이터 폴더의 `projects/*.json`에 자동 저장됩니다. 프로젝트 선택기로 이전 프로젝트를 다시 열고, 원본 파일을 옮긴 경우 **원본 파일 재연결**을 선택하세요. 원본 파일은 프로젝트 JSON에 복사되지 않습니다.
 
@@ -80,7 +82,7 @@ YouTube 업로드 개발 시 Desktop OAuth 클라이언트 ID를 `SHORTFAB_GOOGL
 
 ## 다음 구현·검증 목표
 
-**최우선: YF-0 공식 임베드 OS 실기 → 실제 파트너 서명·원본 매핑 E2E → 실영상 3개 MP4 검증 → 파트너 사용권 철회/키 회전 자동 처리.**
+**최우선: 개인용 YouTube 공개 영상의 Mac 실제 다운로드·MP4 품질 검증 → 캐시/설치 UX 개선 → 자막/TTS/CTA·스타일 → 별도 권리 확인 후 게시.** 승인 파트너 시스템은 필요 시 병행합니다.
 
 Phase 2의 YouTube **게시** 기초 코드는 있지만 Google 실계정/API 검증 전입니다. Phase 1의 자막·TTS·CTA·스타일 카탈로그도 아직 전체 완료가 아닙니다.
 ## YF-1 · 권리자 제공 원본 연결 (2026-10-22)
