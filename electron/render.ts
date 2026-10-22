@@ -39,7 +39,7 @@ export class RenderTask {
     const clipSeconds = request.end - request.start;
     let subtitleDir: string | null = null;
     const filter = layoutFilter(request.width, layout);
-    const hasCaptions = Boolean(subtitles?.cues.length);
+    const hasCaptions = Boolean(subtitles?.cues.length || subtitles?.hook);
     const imageFilters = filter.complex
       ? ['-filter_complex', filter.graph + (hasCaptions ? ';[v]ass=captions.ass[outputv]' : ''),
         '-map', hasCaptions ? '[outputv]' : '[v]']
@@ -55,7 +55,7 @@ export class RenderTask {
       '-y', temporaryPath,
     ];
     try {
-      if (subtitles?.cues.length) {
+      if (hasCaptions && subtitles) {
         // Private ASCII basename via cwd avoids filter path quoting, including Windows drives.
         subtitleDir = await mkdtemp(join(tmpdir(), 'shortfab-caption-'));
         await writeFile(join(subtitleDir, 'captions.ass'), buildAss(subtitles, clipSeconds), { mode: 0o600 });
