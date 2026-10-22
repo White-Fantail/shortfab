@@ -503,3 +503,87 @@
   .wizard-panel:has(.wizard-clip-tabs) { min-height:570px; overflow:visible; }
   .wizard-clip-scroll { min-height:300px; max-height:65vh; }
 }
+
+/* Compact application chrome — one row for project and mode controls. */
+.visually-hidden { position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+.topbar { min-height:64px; height:auto; padding:9px 22px; gap:20px; }
+.topbar-controls { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex:1; min-width:0; }
+.topbar-controls select { color:#f3f0ff; background:#252735; border:1px solid #474557; border-radius:8px;
+  font:inherit; font-size:12px; padding:8px 10px; min-width:0; height:36px; }
+.topbar-controls #project-selector { flex:0 1 360px; max-width:360px; }
+.topbar-controls #creation-mode-select { flex:0 0 112px; }
+.topbar-new-project { font-size:12px; padding:8px 11px; height:36px; white-space:nowrap; }
+.topbar-controls .save-indicator { font-size:10px; color:#afb1c4; white-space:nowrap; }
+@media(max-width:800px) {
+  .topbar { flex-wrap:wrap; padding:10px 14px; gap:9px; }
+  .topbar-controls { flex-basis:100%; justify-content:flex-start; }
+  .topbar-controls #project-selector { flex:1 1 120px; }
+  .topbar-controls .save-indicator { display:none; }
+}
+@media(max-width:430px) {
+  .topbar-new-project { padding:8px; font-size:11px; }
+  .topbar-controls #creation-mode-select { flex-basis:100px; }
+}
+/* Guidance is opt-in: explanation badges overlay content when opened, without reserving height. */
+.wizard-panel { padding:18px clamp(16px,3vw,38px); }
+.wizard-panel-heading .eyebrow { font-size:10px; }
+.wizard-heading-row { display:flex; align-items:center; gap:8px; margin:8px 0 12px; }
+.wizard-heading-row h1, .wizard-panel:has(.wizard-clip-tabs) .wizard-panel-heading h1 {
+  font-size:clamp(17px,1.65vw,23px); margin:0; min-width:0; }
+.wizard-help-badge { position:relative; flex:0 0 auto; }
+.wizard-help-badge summary, .wizard-collapsible summary { display:inline-flex; align-items:center; gap:4px;
+  list-style:none; cursor:pointer; color:#d2bbff; background:#30283f;
+  border:1px solid #5b4779; border-radius:20px; padding:4px 9px; font-size:10px; font-weight:650; }
+.wizard-help-badge summary::-webkit-details-marker, .wizard-collapsible summary::-webkit-details-marker { display:none; }
+.wizard-help-badge > p { position:absolute; z-index:12; right:0; top:100%; width:min(300px,70vw); padding:12px;
+  margin:5px 0 0; color:#e3d9f2; background:#292638; border:1px solid #665584;
+  border-radius:10px; box-shadow:0 8px 26px #08071188; line-height:1.6; font-size:11px; }
+.wizard-collapsible { background:transparent; border:0; padding:0; margin:8px 0; }
+.wizard-collapsible summary { width:max-content; max-width:100%; }
+.wizard-collapsible[open] { padding:0; }
+.wizard-collapsible > p, .wizard-collapsible > small { padding:4px 10px; font-size:11px; max-width:580px; }
+.wizard-clip-toolbar { display:flex; align-items:center; gap:5px; margin:7px 0 8px; min-width:0; }
+.wizard-clip-tabs { margin:0; flex:1; }
+.wizard-clip-tabs button { padding:8px 4px; }
+.wizard-clip-help summary { padding:7px 10px; }
+.wizard-short-summary { flex-direction:row; justify-content:space-between; align-items:center; gap:8px;
+  border:0; padding:1px 0; background:transparent; }
+.wizard-short-summary strong { font-size:12px; }
+.wizard-clip-scroll .wizard-clip-section-heading { margin:10px 0 7px; }
+.wizard-clip-scroll .wizard-clip-section-heading strong { font-size:12px; }
+.wizard-clip-scroll .wizard-assembly-list { margin:8px 0 14px; }
+.wizard-clip-scroll .wizard-insight { margin:5px 0 12px; }
+.wizard-panel:has(.wizard-clip-tabs) .wizard-footer { margin-top:7px; padding-top:8px; }
+.wizard-panel:has(.wizard-clip-tabs) .wizard-generate-note { display:none; }
+.wizard-inline-label { font-size:11px; margin:10px 0 4px; color:#a3a2b4; }
+.style-gallery { margin:10px 0 14px; }
+.style-example-fixed { position:absolute; z-index:3; left:0; right:0; display:flex; align-items:center;
+  justify-content:center; text-align:center; font-weight:900; line-height:1.2; min-height:12%;
+  padding:5px; overflow:hidden; overflow-wrap:anywhere; text-shadow:0 1px 3px #000; }
+.style-example-fixed.fixed-top { top:1.5%; }
+.style-example-fixed.fixed-bottom { bottom:2%; }
+.style-example-fixed img { display:block; width:auto; height:auto; object-fit:contain; }
+.style-gallery-card .style-example-text { bottom:23%; }
+.style-gallery-card:not(:has(.style-example-fixed.fixed-bottom)) .style-example-text { bottom:16%; }
+.wizard-fixed-editor { display:grid; gap:10px; margin:15px 0; padding:13px; border:1px solid #55446a; border-radius:11px; }
+.wizard-fixed-editor > strong { font-size:13px; }
+.wizard-fixed-editor > .hint { margin:0; }
+.wizard-fixed-slot { display:grid; gap:10px; padding:12px; background:#232433; border-radius:8px; }
+.wizard-fixed-slot label { display:grid; gap:5px; }
+.wizard-fixed-slot-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.wizard-fixed-slot-heading strong { font-size:12px; }
+.wizard-fixed-slot select { background:#292b3c; border:1px solid #51465b; padding:7px;
+  color:#fff; border-radius:6px; }
+.wizard-fixed-slot input[type="file"] { font-size:11px; padding:6px; min-height:0; }
+.wizard-fixed-properties { display:grid; grid-template-columns:1fr 2fr 1fr; align-items:center; gap:12px; }
+.wizard-fixed-slot input[type="color"] { padding:2px; min-height:30px; height:30px; }
+.wizard-fixed-slot input[type="range"] { min-height:22px; accent-color:#b18bff; }
+.wizard-fixed-checkbox { display:flex!important; align-items:center; gap:5px!important; font-size:11px; }
+.wizard-fixed-checkbox input[type="checkbox"] { width:auto; min-height:0; }
+.wizard-fixed-preview-image { max-width:160px; max-height:80px; object-fit:contain; }
+@media(max-width:650px) {
+  .wizard-panel { padding:16px; }
+  .wizard-panel:has(.wizard-clip-tabs) { min-height:620px; }
+  .wizard-clip-scroll { max-height:70vh; }
+  .wizard-fixed-properties { grid-template-columns:1fr 1fr; }
+}
