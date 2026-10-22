@@ -404,7 +404,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy || sourceBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
+    if (renderBusy || sourceBusy || frameBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
     const activeClip = projects.activeClip;
