@@ -8,6 +8,8 @@ import { RenderTask } from './render.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
 import { SttTask } from './stt.js';
+import { AnalyzeVideoTask, rerank } from './analyze.js';
+import { validateAnalyzeRequest, type AnalyzeProgress, type AnalyzeResult } from '../src/shared/recommendations.js';
 import { installDefaultSttModel, modelValid, setSttModelPath, sttModelPath, sttStatus } from './stt-model.js';
 import { MAX_STT_SECONDS, validateSttRequest, type SttProgress, type SttResult } from '../src/shared/stt.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
@@ -24,6 +26,8 @@ let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
 let sttBusy = false;
+let analysisBusy = false;
+let analysisTask: AnalyzeVideoTask | null = null;
 let sttModelBusy = false;
 let sttModelAbort: AbortController | null = null;
 let sttCancelled = false;
@@ -38,7 +42,7 @@ const publisher = new YouTubePublisher((job) => {
 });
 
 function requireIdle(): void {
-  if (renderBusy || sourceBusy || sttBusy || sttModelBusy || publisher.isBusy) throw new Error('진행 중인 모델 설치·원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
+  if (renderBusy || sourceBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('진행 중인 모델 설치·원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -193,6 +197,52 @@ app.whenReady().then(() => {
     return publisher.refresh(id, projectId);
   });
 
+  function reportAnalysis(progress: AnalyzeProgress): void {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('analysis:progress', progress);
+    }
+  }
+  ipcMain.handle('analysis:cached', async (_event, videoId: unknown, duration: unknown, language: unknown) => {
+    if (typeof videoId !== 'string' || typeof duration !== 'number' || typeof language !== 'string') return null;
+    const request = validateAnalyzeRequest({ videoId, duration, language, mode: 'balanced', refresh: false });
+    if (projects.activeYoutubeVideoId !== request.videoId ||
+        Math.abs((projects.activeYoutubeDuration ?? -1) - request.duration) > 2) return null;
+    const modelPath = await sttModelPath();
+    if (!await modelValid(modelPath)) return null;
+    const cached = await AnalyzeVideoTask.cached(request.videoId, request.duration, request.language, modelPath!);
+    return cached ? rerank(cached, request.mode) : null;
+  });
+  ipcMain.handle('analysis:start', async (_event, payload: unknown): Promise<AnalyzeResult> => {
+    requireIdle();
+    const request = validateAnalyzeRequest(payload);
+    if (projects.activeYoutubeVideoId !== request.videoId ||
+        Math.abs((projects.activeYoutubeDuration ?? -1) - request.duration) > 2) {
+      throw new Error('저장된 YouTube 원본이 변경되었습니다. 다시 열고 분석하세요.');
+    }
+    const expectedProject = projects.activeProjectId;
+    analysisBusy = true; // Lock before model I/O, source download and transcription.
+    analysisTask = new AnalyzeVideoTask();
+    const task = analysisTask;
+    try {
+      const path = await sttModelPath();
+      if (!await modelValid(path)) throw new Error('분석을 시작하려면 로컬 Whisper.cpp 및 다국어 GGML 모델을 준비하세요.');
+      const result = await task.run(request, path!, reportAnalysis);
+      if (projects.activeProjectId !== expectedProject ||
+          projects.activeYoutubeVideoId !== request.videoId) {
+        throw new Error('분석 중 프로젝트 원본이 변경되었습니다.');
+      }
+      return result;
+    } catch (cause) {
+      if (task !== analysisTask) throw new Error('분석 작업이 변경되었습니다.');
+      if (task.isCancelled) return { status: 'cancelled' };
+      throw cause;
+    } finally {
+      analysisTask = null;
+      analysisBusy = false;
+    }
+  });
+  ipcMain.handle('analysis:cancel', () => { analysisTask?.cancel(); });
+
   ipcMain.handle('stt:status', () => sttStatus());
   ipcMain.handle('stt:installModel', async () => {
     requireIdle();
@@ -297,7 +347,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy || sourceBusy || sttBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
+    if (renderBusy || sourceBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
     const activeClip = projects.activeClip;
@@ -382,4 +432,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => { personalTask?.cancel(); currentTask?.cancel(); sttTask?.cancel(); sttPersonalTask?.cancel(); });
+app.on('before-quit', () => { analysisTask?.cancel(); personalTask?.cancel(); currentTask?.cancel(); sttTask?.cancel(); sttPersonalTask?.cancel(); });
