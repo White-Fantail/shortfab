@@ -16,6 +16,7 @@ describe('versioned project edit schema', () => {
     expect(result.title).toBe('여행 하이라이트');
     expect(result.clips[0].end).toBe(32);
     expect(result.clips[0].source).toBe('local'); // Legacy clips migrated.
+    expect(result.shortClipIds).toEqual([clipId]); // Preserve legacy single-clip exports.
     expect('localPath' in result).toBe(false);
   });
 
@@ -107,5 +108,17 @@ describe('versioned project edit schema', () => {
     expect(() => validateProjectEdits({ ...valid, youtubeDuration: 20, clips: [clip] }, null)).toThrow();
     expect(() => validateProjectEdits({ ...valid, youtubeUrl: '', youtubeDuration: 120, clips: [clip] }, null)).toThrow();
     expect(() => validateProjectEdits(valid, null)).toThrow();
+  });
+  it('stores an ordered short made from independent parts of the same YouTube source', () => {
+    const second = { ...valid.clips[0], id: '32971c6b-e5d3-4747-b21a-7474b0fa1310',
+      source: 'youtube' as const, title: 'Outro', start: 60, end: 78 };
+    const first = { ...valid.clips[0], source: 'youtube' as const, start: 8, end: 22 };
+    const input = { ...valid, youtubeDuration: 180, clips: [first, second],
+      selectedClipId: clipId, shortClipIds: [second.id, first.id] };
+    expect(validateProjectEdits(input, null).shortClipIds).toEqual([second.id, clipId]);
+    expect(() => validateProjectEdits({ ...input, shortClipIds: [second.id, second.id] }, null)).toThrow('순서');
+    expect(() => validateProjectEdits({ ...input, shortClipIds: [projectId] }, null)).toThrow('순서');
+    expect(() => validateProjectEdits({ ...input, clips: [{ ...first, source: 'local' }, second] }, 180))
+      .toThrow('동일한 원본');
   });
 });
