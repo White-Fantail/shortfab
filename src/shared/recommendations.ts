@@ -160,7 +160,7 @@ export function parseAnalysisSrt(contents: string, offset: number, segmentSecond
     if (!match) throw new Error('Whisper 분석의 SRT 형식을 확인할 수 없습니다.');
     const from = +match[1] * 3600 + +match[2] * 60 + +match[3] + +match[4] / 1000;
     const to = +match[5] * 3600 + +match[6] * 60 + +match[7] + +match[8] / 1000;
-    const text = parts.slice(idx + 1).join(' ').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    const text = Array.from(parts.slice(idx + 1).join(' ')).map(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char).join('').replace(/\s+/g, ' ').trim();
     if (!text || to <= from || from >= segmentSeconds + 0.02) continue;
     const start = offset + Math.max(0, from);
     const end = offset + Math.min(segmentSeconds, to);
