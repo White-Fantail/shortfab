@@ -124,7 +124,7 @@ export class AnalyzeVideoTask {
       this.stt = new SttTask();
       const srt = await this.stt.transcribeSlice({
         sourcePath: acquired.path, modelPath, start, end, language: request.language,
-      }, phase => this.progress(callback, phase, 27 + ((index + (phase === 'transcribe' ? 0.45 : 0)) / slices) * 66,
+      }, phase => this.progress(callback, phase === 'extract' ? 'extract' : 'transcribe', 27 + ((index + (phase === 'transcribe' ? 0.45 : 0)) / slices) * 66,
         `원본 음성 분석 중 · ${index + 1}/${slices} 구간 (${phase === 'extract' ? '오디오 분리' : '전사'})`));
       this.check();
       allSegments.push(...parseAnalysisSrt(srt, start, slice));
