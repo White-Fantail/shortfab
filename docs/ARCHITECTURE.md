@@ -1,5 +1,13 @@
 # ShortFab 아키텍처 v2.0 — AI 단계별 쇼츠 제작
 
+## 2026-10-22: 조합형 쇼츠 데이터 및 렌더 경계
+
+- `clips[]`: 비파괴 개별 구간/미디어/자막/레이아웃/나레이션 저장. `shortClipIds[]`: 하나의 MP4에 포함할 구간 ID의 **재생 순서**. `selectedClipId`: 독립적인 편집 포커스. 과거 schema v1 파일의 구성 누락은 선택된 클립 단일 구성으로 복원합니다.
+- 검증은 동일 원본 종류, 유효·중복 없는 ID, 각 구간 유효시간을 강제합니다. Wizard 렌더 요청의 구성 ID 목록은 메인 프로세스가 저장된 순서와 일치하는지 검사하며 실제 시간 값은 저장 데이터로 재구성합니다.
+- `electron/composition.ts`: 최종 구성 구간을 순서대로 `RenderTask`에 전달하고, AAC 오디오 스트림(무음 원본 포함)과 동일 해상도로 인코딩한 분할 MP4를 FFmpeg concat demuxer로 연결. 결과 파일이 유효해야만 목적 위치로 이동하며 취소/실패 시 중간 파일을 삭제합니다. YouTube 개인 다운로드는 구성된 최대 OUT 지점 한 번만 수행합니다.
+- 선택된 클립이 바뀌어도 구성 순서는 유지합니다. Wizard 스타일 카드는 모든 포함 장면에 같은 디자인을 적용하면서 각 장면 자막 타이밍을 보존합니다. 여러 장면의 MP4는 단일 클립 YouTube 게시 아티팩트로 기록하지 않습니다.
+
+
 - 2026-10-22 기준 **목표 설계**. 현재 구현 완료와 구분한다.
 - 제품 정의: [PRODUCT_BLUEPRINT](PRODUCT_BLUEPRINT.md) · 상태: [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md) · 실행 순서: [ROADMAP](ROADMAP.md).
 - 현재 Electron + React/TypeScript, 로컬 프로젝트 JSON, IFrame, 개인용 yt-dlp/FFmpeg, Whisper STT 연결 및 YouTube OAuth 코드를 **교체하지 않고 단계적으로 확장**한다.
