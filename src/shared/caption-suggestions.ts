@@ -14,7 +14,7 @@ const signal = /(?:왜|어떻게|진짜|비밀|놀라|결론|핵심|중요|반�
 /** Use only actual recognized text. Never claim generated words or a measured audience score. */
 export function suggestSubtitleDecorations(track: SubtitleTrack, duration: number): SubtitleSuggestion | null {
   const checked = validateSubtitleTrack(track, duration);
-  if (!checked?.cues.length) return null;
+  if (!checked?.cues.length || duration < 0.5) return null;
   const ranked = [...checked.cues].filter(x => x.text.trim()).sort((a, b) =>
     (Number(signal.test(b.text)) - Number(signal.test(a.text))) || a.start - b.start);
   const first = ranked[0];
