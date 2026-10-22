@@ -97,7 +97,12 @@ export class SttTask {
         '-m', input.modelPath, '-f', wav, '-l', input.language,
         '-osrt', '-of', prefix, '-np',
       ], 'transcribe');
-      const file = await stat(prefix + '.srt');
+      const file = await stat(prefix + '.srt').catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return null;
+        throw error;
+      });
+      // whisper-cli may write no SRT file when the source contains silence.
+      if (!file) return '';
       if (!file.isFile() || file.size > 2 * 1024 * 1024) throw new Error('영상 음성 분석 파일이 올바르지 않습니다.');
       return await readFile(prefix + '.srt', 'utf8');
     } finally {
