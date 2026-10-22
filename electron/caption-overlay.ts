@@ -52,7 +52,7 @@ const PAINT_CANVAS = [
   'function draw(text,style,mode){',
   'if(!text)return;',
   'let size=style.size*s; const maxWidth=c.width-(mode==="hook"?70:84)*s;',
-  'const family="\"Apple SD Gothic Neo\",\"Noto Sans CJK KR\",Arial,sans-serif";',
+  'const family="Apple SD Gothic Neo, Noto Sans CJK KR, Arial, sans-serif";',
   'let lines=[];',
   'for(let attempt=0;attempt<12;attempt++){',
   'ctx.font=(style.bold?"900 ":"400 ")+size+"px "+family;',

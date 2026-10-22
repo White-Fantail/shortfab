@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { captionIntervals, captionOverlayGraph } from './caption-overlay';
 
@@ -32,4 +36,41 @@ describe('libass-free caption image timeline', () => {
     expect(captionOverlayGraph('[0:v:0]scale=720:1280[v]', true))
       .toContain('[v][1:v]overlay=');
   });
+});
+
+const ffmpegReady = ['ffmpeg', 'ffprobe'].every(binary =>
+  spawnSync(binary, ['-version'], { stdio: 'ignore' }).status === 0);
+
+describe('FFmpeg PNG overlay composition without libass', () => {
+  it.skipIf(!ffmpegReady)('encodes a timed image overlay through the existing video encoder', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shortfab-png-overlay-'));
+    try {
+      const frame = join(dir, 'caption-0.png');
+      const source = spawnSync('ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+        'color=c=red:s=128x128:r=15:d=1', '-frames:v', '1', '-y', frame,
+      ], { timeout: 15_000, encoding: 'utf8' });
+      expect(source.status, source.stderr).toBe(0);
+      await writeFile(join(dir, 'captions.ffconcat'),
+        "ffconcat version 1.0\\nfile 'caption-0.png'\\nduration 1.0\\nfile 'caption-0.png'\\n"
+          .replaceAll('\\\\n', '\\n'));
+      const output = join(dir, 'out.mp4');
+      const render = spawnSync('ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+        'color=c=blue:s=128x128:r=15:d=2', '-f', 'concat', '-safe', '0', '-i',
+        join(dir, 'captions.ffconcat'), '-t', '2', '-filter_complex',
+        captionOverlayGraph('scale=128:128,fps=15', false),
+        '-map', '[outputv]', '-c:v', 'mpeg4', '-y', output,
+      ], { timeout: 20_000, encoding: 'utf8' });
+      expect(render.status, render.stderr).toBe(0);
+      const inspect = spawnSync('ffprobe', [
+        '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+        'stream=width,height', '-of', 'csv=p=0', output,
+      ], { encoding: 'utf8' });
+      expect(inspect.status).toBe(0);
+      expect(inspect.stdout.trim()).toBe('128,128');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 40_000);
 });
