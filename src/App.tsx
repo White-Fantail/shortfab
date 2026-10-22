@@ -12,6 +12,7 @@ import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } fr
 import { WizardPanel, WizardProgress } from './WizardPanel';
 import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
 import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
+import { captionsFromAnalysis, hasTranscriptForClip, suggestSubtitleDecorations } from './shared/caption-suggestions';
 import { layoutSignature } from './shared/layout-styles';
 
 type SourceTab = 'local' | 'youtube';
@@ -70,6 +71,7 @@ function App() {
   const [sttLanguage, setSttLanguage] = useState<SttLanguage>('auto');
   const [sttSetup, setSttSetup] = useState<SttStatus | null>(null);
   const [sttMessage, setSttMessage] = useState('');
+  const [captionDraftMessage, setCaptionDraftMessage] = useState('');
   const [publishing, setPublishing] = useState<PublishOverview | null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
   const [publishError, setPublishError] = useState('');
@@ -140,6 +142,7 @@ function App() {
     setAnalysisError('');
     setSelectedRecommendations([]);
     setRecommendationPreview(null);
+    setCaptionDraftMessage('');
     setFrameStill(null);
     setFrameError('');
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
@@ -510,6 +513,44 @@ function App() {
   function updateSubtitles(edit: (value: SubtitleTrack) => SubtitleTrack) {
     if (!clip) return;
     updateClip({ subtitles: edit(clip.subtitles ?? { preset: 'classic', cues: [] }) });
+    setCaptionDraftMessage('');
+  }
+
+  function importTranscriptCaptions() {
+    const current = draftRef.current;
+    const selected = current?.clips.find(item => item.id === current.selectedClipId);
+    if (!selected || !analysis || analysis.videoId !== youtubeVideoId(current?.youtubeUrl ?? '') ||
+        !hasTranscriptForClip(analysis, selected.start, selected.end)) {
+      setCaptionDraftMessage('현재 클립의 분석 대사가 없습니다. 02 클립 단계에서 분석하거나 Whisper 자막 생성을 사용하세요.');
+      return;
+    }
+    if (selected.subtitles?.cues.length && !window.confirm('현재 자막 문장과 타이밍을 분석 대사로 교체할까요? 취소하면 기존 수정 내용은 유지됩니다.')) return;
+    try {
+      const track = captionsFromAnalysis(analysis, selected.start, selected.end,
+        selected.subtitles?.preset ?? 'classic');
+      updateClip({ subtitles: { ...track, hook: selected.subtitles?.hook ?? null } });
+      setCaptionDraftMessage(`AG2에서 인식한 실제 대사로 자막 ${track.cues.length}개를 생성했습니다. 문장을 확인해 주세요.`);
+    } catch (cause) {
+      setCaptionDraftMessage(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  function applyCaptionSuggestions() {
+    if (!clip) return;
+    const duration = clip.end - clip.start;
+    const current = clip.subtitles ?? { preset: 'classic' as const, cues: [] };
+    const suggestion = suggestSubtitleDecorations(current, duration);
+    if (!suggestion) {
+      setCaptionDraftMessage('Hook 후보를 만들 자막이 없습니다. 먼저 자막을 생성하거나 입력해 주세요.');
+      return;
+    }
+    if ((current.hook || current.cues.some(x => x.emphasis)) &&
+        !window.confirm('현재 Hook/강조 선택을 새 제안으로 바꿀까요? 수정한 문장은 그대로 유지됩니다.')) return;
+    updateSubtitles(value => ({
+      ...value, hook: suggestion.hook,
+      cues: value.cues.map(item => ({ ...item, emphasis: suggestion.emphasizedCueIds.includes(item.id) })),
+    }));
+    setCaptionDraftMessage(suggestion.reason + ' Hook과 강조 표시는 직접 수정하거나 끌 수 있습니다.');
   }
 
   function addCaption() {
@@ -596,7 +637,8 @@ function App() {
         changeDraft((current) => ({
           ...current,
           clips: current.clips.map((item) => item.id === selected ? {
-            ...item, subtitles: result.track,
+            ...item, subtitles: { ...result.track, preset: item.subtitles?.preset ?? result.track.preset,
+              hook: item.subtitles?.hook ?? null },
           } : item),
         }));
         setSttMessage(`자동 자막 ${result.track.cues.length}개 생성 완료. 내용을 검토하고 수정한 뒤 MP4로 출력하세요.`);
@@ -910,6 +952,15 @@ function App() {
           onRender={() => void renderClip()}
           onCancelRender={() => void window.shortfab?.cancelRender()}
           onTranscribe={() => void generateSubtitles()}
+          onImportCaptions={importTranscriptCaptions}
+          hasCachedTranscript={clip?.source === 'youtube' && !!clip && analysis?.videoId === youtubeId &&
+            hasTranscriptForClip(analysis, clip.start, clip.end)}
+          onSuggestDecorations={applyCaptionSuggestions}
+          captionDraftMessage={captionDraftMessage}
+          onSeekCaption={(seconds) => { moveTo(seconds); }}
+          onUpdateCaption={updateCaption}
+          onRemoveCaption={removeCaption}
+          onAddCaption={addCaption}
           onInstallModel={() => void installSttModel()} />}
 
         <aside className="sidebar" hidden={wizardMode}>
@@ -1172,8 +1223,13 @@ function App() {
                   <small>{sourceTab === 'youtube' ? 'YouTube URL을 입력해 주세요' : project?.sourceStatus === 'missing' ? '원본을 재연결해 주세요' : '로컬 영상을 선택하세요'}</small>
                 </div>
               )}
+              {clip?.subtitles?.hook && currentTime >= clip.start &&
+                currentTime < clip.start + clip.subtitles.hook.duration && <div aria-hidden="true"
+                  className={`subtitle-hook-preview hook-${clip.subtitles.hook.style}`}>
+                  {clip.subtitles.hook.text}
+                </div>}
               {activeCaption && clip?.subtitles && <div aria-hidden="true"
-                className={`subtitle-preview subtitle-${clip.subtitles.preset}`}>
+                className={`subtitle-preview subtitle-${activeCaption.emphasis ? 'emphasis' : clip.subtitles.preset}`}>
                 {activeCaption.text}
               </div>}
             </div>
