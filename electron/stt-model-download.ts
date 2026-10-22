@@ -56,6 +56,9 @@ export async function downloadPinnedModel(options: ModelDownloadOptions): Promis
   const fetcher = options.fetcher ?? fetch;
   await mkdir(dirname(options.destination), { recursive: true, mode: 0o700 });
   const temporary = join(dirname(options.destination), '.shortfab-model-' + randomUUID() + '.tmp');
+  const transferSignal = options.signal
+    ? AbortSignal.any([options.signal, AbortSignal.timeout(15 * 60_000)])
+    : AbortSignal.timeout(15 * 60_000);
   try {
     let current = requested;
     let response: Response | null = null;
@@ -63,7 +66,7 @@ export async function downloadPinnedModel(options: ModelDownloadOptions): Promis
       if (options.signal?.aborted) throw new Error('모델 다운로드가 취소되었습니다.');
       response = await fetcher(current, {
         redirect: 'manual',
-        signal: options.signal ?? AbortSignal.timeout(180_000),
+        signal: transferSignal,
         headers: { 'User-Agent': 'ShortFab/0.1 model installer' },
       });
       if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -118,6 +121,10 @@ export async function downloadPinnedModel(options: ModelDownloadOptions): Promis
     await rm(options.destination, { force: true });
     await rename(temporary, options.destination);
     options.onProgress?.(100);
+  } catch (cause) {
+    if (options.signal?.aborted) throw new Error('모델 다운로드가 취소되었습니다.');
+    if (transferSignal.aborted) throw new Error('모델 다운로드 제한 시간(15분)을 초과했습니다. 다시 시도해 주세요.');
+    throw cause;
   } finally {
     await rm(temporary, { force: true }).catch(() => {});
   }
