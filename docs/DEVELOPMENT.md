@@ -148,8 +148,8 @@ macOS에서 `brew install yt-dlp ffmpeg` 설치 후 `npm run dev`로 시작합�
 
 ## 로컬 STT/Whisper.cpp 개발·수용 (2026-10-22)
 
-- Mac: `brew install whisper.cpp ffmpeg`. `whisper-cli --help`와 `ffmpeg -version`을 확인하고 [모델 안내](STT_LOCAL.md)에서 GGML **다국어** `.bin` 모델을 내려받으세요. 앱의 자막 편집 > GGML 모델 파일 선택에서 지정합니다.
+- Mac: `brew install whisper.cpp ffmpeg`. `whisper-cli --help`와 `ffmpeg -version`을 확인하고 앱의 **자막 편집 → 기본 한국어·영어 모델 설치 (약 148MB)** 클릭. 공식 배포 모델을 HTTPS로 가져와 SHA-256 검증 후 연결합니다. 이미 받은 GGML 다국어 `.bin`은 **다른 GGML 모델 파일 선택…**을 사용할 수 있습니다. 자세한 [모델 안내](STT_LOCAL.md).
 - Windows: `whisper-cli.exe`, `ffmpeg.exe`를 PATH에 두거나 `SHORTFAB_WHISPER_PATH`/`SHORTFAB_FFMPEG_PATH`에 각각 절대 경로로 지정합니다.
 - 기존 개인 YouTube URL을 열고 클립을 고른 뒤 자막 편집에서 언어 자동/ko/en을 선택하고 AI 자동 자막 생성. 완료 후 각 구간이 **클립 IN을 0초로** 표시하는지, 수동 수정·스타일·MP4 번인이 되는지 확인하세요.
 - 기존 자막 교체 취소, 인식 중 취소, CLI/모델 누락, 오디오가 없는 영상, 10분 초과, 자막 30개 초과, 파일 크기·임시 파일 정리를 별도 시험합니다.
-- 단위: `src/shared/stt.test.ts`; 합성 FFmpeg→fake whisper SRT 통합: `electron/stt.test.ts`. **실제 음성 Whisper 모델 정확도/OS 실기 수용은 자동 합성 테스트와 분리**합니다.
+- 단위: `src/shared/stt.test.ts`; 합성 FFmpeg→fake whisper SRT 통합: `electron/stt.test.ts`; 모델 설치·검증·캐시·취소: `electron/stt-model-download.test.ts`. **실제 음성 Whisper 모델 정확도/OS 실기 수용은 자동 합성 테스트와 분리**합니다.
