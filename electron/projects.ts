@@ -79,6 +79,8 @@ export class ProjectStore {
   }
 
   get selectedClipSource(): 'local' | 'youtube' | null { return this.activeClip?.source ?? null; }
+  get activeYoutubeVideoId(): string | null { return youtubeVideoId(this.active?.youtubeUrl ?? ''); }
+  get activeYoutubeDuration(): number | null { return this.active?.youtubeDuration ?? null; }
 
   get youtubeBinding(): StoredMediaBinding | null { return this.active?.youtubeBinding ?? null; }
 
