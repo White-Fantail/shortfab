@@ -14,12 +14,12 @@
 | AG1 8단계 Wizard/StepRecord/비파괴 재생성 | 설계 완료 | **1차 코드/단위 테스트 구현**; 8단계 UI/승인/스텝 재열기/잠금/무효화/고급 편집 분리, 사용자 실기 QA·AI 재생성은 미완료 |
 | AG2 URL 자동 분석·AI 클립 후보 추천 | 설계 완료 | **코드 구현·자동 테스트**: yt-dlp 캐시+Whisper 구간 전사·최대 8개 설명형 후보·다중 채택·재생·문장 IN/OUT·재추천·캐시·취소. **실제 YouTube/한영 모델 사용자 수용 및 LLM/장면 기반 고도화 대기** |
 | AG3 선택형 화면 스타일 갤러리·FFmpeg 합성 | **자동 인물 배치 대신 카드 선택 UX로 변경** | **코드·합성 테스트 구현**: 크롭 3종·블러 배경 전체 보기, 실제 클립 정지 프레임·스와이프 카드·미세 수정·MP4 렌더/출력 신선도 검사. **실제 사용자 수용 대기** |
-| AG4 자막 스타일 갤러리·후킹 | 갤러리 우선 UX 전환 | **4종 자막 스와이프 카드/기존 ASS 번인 연동** (AG3 병행), 자동 Hook·강조·동적 스타일은 미구현 |
+| AG4 자막 스타일 갤러리·후킹 | 갤러리 우선 UX | **코드·자동 테스트 구현:** 8종 스와이프 카드, AG2 실제 대사에서 자막 생성, Wizard 문장/시간 편집, 사용자 승인형 Hook·큐 강조, ASS/MP4 합성. **실영상 한영 자막 안전 영역·사용자 실기 대기** |
 | AG5 TTS·BGM/효과음 믹싱 및 AI 추천 | 설계 완료 | **미구현** |
 | AG6 AI CTA·최종 다단계 합성 검토 | 설계 완료 | **미구현** |
 | AG7 새 UX E2E·게시/패키징 검증 | 설계 완료 | **미검증**; 구 기술의 URL→MP4 사용자 실기 1건 이상 성공 |
 
-**새 다음 개발 순서:** AG1/AG2 사용자 실기 회귀 수용·선택형 LLM/장면 경계 개발 → AG3 자동 레이아웃 → AG4 자막 → AG5 소리 → AG6 CTA·검토 → AG7 실제 수용. 기존 'TTS/CTA부터 개발' 우선순위는 폐기. 완료 표기는 신규 Exit를 통과할 때만 갱신한다.
+**새 다음 개발 순서:** AG1~AG4 구현분 한꺼번에 사용자 실기 검증 → AG5 소리 카드/나레이션 → AG6 CTA/검토 → AG7 실제 수용. AG3 자동 배치 목표는 스타일 카드 직접 선택 UX로 대체. 기존 'TTS/CTA부터 개발' 우선순위는 폐기. 완료 표기는 신규 Exit를 통과할 때만 갱신한다.
 
 ## AG1 코드 변경 / 미완료 범위 (2026-10-22)
 
@@ -48,6 +48,14 @@
 - `src/shared/layout-styles.ts` + ProjectClip.layout: 설정 검증, 구 프로젝트 기본 중앙 크롭 변환, 클립별 독립 저장. RenderTask FFmpeg 크롭/블러 합성, 자막·오디오 유지. 변경 후 Wizard needs_review 및 `YouTubePublisher` 서버 측 오래된 렌더 업로드 거절.
 - **자동 검증:** `src/shared/layout-styles.test.ts` 및 `electron/layout-render.test.ts`에서 타입·범위·기존 JSON·무효화·FFmpeg 합성/실제 프레임 추출 회귀. **실기 대기:** 사용자가 아직 AG1/AG2 화면도 확인하지 못했으므로 AG3 포함 한 번에 실기 확인 필요.
 - **후속:** 장면별 동적 카드·트렌드 스타일 카탈로그/비디오 재생 일치 미리보기·AG4 한영 자동 자막 스타일 생성. [스타일 UX·테스트 상세](STYLE_GALLERY.md).
+
+## AG4 문장/Hook 스타일 갤러리 구현 (2026-10-22 · 코드/CI)
+
+- 04 자막 단계에서 8종 슬라이드 스타일 카드 선택, AG2 캐시의 실제 대사(타임코드)를 클립 자막으로 변환, 독립된 Whisper 클립 재전사와 취소 안내를 제공. AG2 캐시만 재활용할 때는 Whisper를 중복 실행하지 않는다.
+- 30큐 제한·발화 범위·한 Cue 100자와 Hook 64자/0.5~5초 검증; 일부 문장을 임의로 생략하지 않음. 수동 문장/IN/OUT/추가/삭제·강조 체크와 사용자가 수락하는 Hook 제안/수정을 04 Wizard 안에서 진행한다. 기존 수정 자막 교체 전 확인, 이전 스타일·Hook 유지.
+- `src/shared/subtitles.ts`, `src/shared/caption-suggestions.ts`, `src/StyleGallery.tsx`, `src/WizardPanel.tsx`, `src/App.tsx`, `electron/subtitles.ts`, `electron/render.ts`에 구현. 전체 큐 강조는 실제 단어/음절 자동 싱크라고 주장하지 않음. Hook은 독립 상단 오버레이로 MP4에 기록된다.
+- 자동 검증: `src/shared/caption-suggestions.test.ts`, `electron/subtitles.test.ts`, `electron/layout-render.test.ts`; 마지막 CI와 기기별 한/영 실제 자막 확인은 별도다. [AG4 사용·테스트](AG4_CAPTIONS.md).
+- 실제 YouTube/한영 GGML 모델 설치, macOS/Windows, 장문·폰트·안전 영역/영상 렌더 일치, AG1/AG2/AG3 사용자 수용은 아직 **미확인**. AG4 전체 Exit 완료로 표시하지 않는다.
 
 ## 수용 및 구현 현황
 
