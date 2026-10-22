@@ -8,6 +8,10 @@ const subtitles: Record<SubtitlePreset, { name: string; description: string }> =
   bold: { name: '팝 옐로우', description: '노란 굵은 글씨·강한 강조' },
   minimal: { name: '미니멀', description: '작고 담백한 자막' },
   boxed: { name: '박스 자막', description: '반투명 어두운 배경' },
+  neon: { name: '네온 팝', description: '청록 빛 글자와 대비 외곽선' },
+  cinema: { name: '시네마', description: '작은 흰 글씨, 넉넉한 여백' },
+  impact: { name: '임팩트', description: '초대형 굵은 글씨' },
+  topline: { name: '상단 자막', description: '화면 상단에 배치된 문장' },
 };
 export function StyleGallery({ kind, selected, videoId, frameImage, focus, sampleText, disabled, onChoose }: {
   kind: Kind;
