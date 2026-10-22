@@ -38,7 +38,10 @@ export function validateSubtitleTrack(input: unknown, duration: number, label = 
       throw new Error(name + ': 시간은 클립 시작 기준이며, 구간을 확인해 주세요 (최소 0.1초).');
     }
     if (typeof item.text !== 'string' || !item.text.trim() || item.text.length > 100 ||
-        /[\u0000-\u0008\u000b-\u001f\u007f]/.test(item.text)) {
+        [...item.text].some((char) => {
+          const code = char.charCodeAt(0);
+          return (code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127;
+        })) {
       throw new Error(name + ': 내용을 1~100자로 입력해 주세요.');
     }
     ids.add(item.id);
