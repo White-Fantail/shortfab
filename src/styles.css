@@ -174,32 +174,39 @@
 .source-partner>strong{font-size:12px;color:#e3d2ff}
 .source-partner .hint{margin:0}
 
-/* Personal flow remains visible; partner/rights configuration stays collapsed. */
-.source-advanced{display:block;padding-top:12px}
-.source-advanced>summary{cursor:pointer;color:#a79fbb;font-size:12px;line-height:1.5}
-.source-advanced[open]>summary{margin-bottom:10px}
-
-/* Keep long personal-source notices out of the primary editing workflow. */
-.source-info {
-  margin-top: 10px;
-  border: 1px solid #363846;
-  border-radius: 8px;
-  color: #a5a7bd;
-  font-size: 11px;
+/* Both source disclosures use the same minimal inline chevron/summary style.
+ * The lengthy notice and the advanced provider options stay collapsed by default. */
+.source-info,
+.source-advanced {
+  display: block;
+  margin: 0;
+  padding: 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: #a79fbb;
+  font-size: 12px;
 }
-.source-info > summary {
+.source-info > summary,
+.source-advanced > summary {
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 0;
+  color: #a79fbb;
+  font-size: 12px;
+  line-height: 1.5;
   user-select: none;
 }
-.source-info[open] > summary { border-bottom: 1px solid #363846; }
+.source-info[open] > summary,
+.source-advanced[open] > summary {
+  margin-bottom: 10px;
+}
 .source-info-body {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding: 12px;
+  padding: 0 0 8px 14px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+  font-size: 11px;
 }
 .source-info-body strong { color: #d9d5e8; }
 .source-info-body a { color: #bfaff7; }
