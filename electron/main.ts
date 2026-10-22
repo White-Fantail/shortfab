@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
+import { FramePreviewTask } from './frame.js';
 import { layoutSignature } from '../src/shared/layout-styles.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
@@ -26,6 +27,10 @@ let currentTask: RenderTask | null = null;
 let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
+let frameBusy = false;
+let frameCancelled = false;
+let frameTask: FramePreviewTask | null = null;
+let frameSourceTask: PersonalVideoTask | null = null;
 let sttBusy = false;
 let analysisBusy = false;
 let analysisTask: AnalyzeVideoTask | null = null;
@@ -43,7 +48,7 @@ const publisher = new YouTubePublisher((job) => {
 });
 
 function requireIdle(): void {
-  if (renderBusy || sourceBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('진행 중인 모델 설치·원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
+  if (renderBusy || sourceBusy || frameBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('진행 중인 모델 설치·원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -347,6 +352,57 @@ app.whenReady().then(() => {
     sttTask?.cancel();
   });
 
+  ipcMain.handle('preview:frame', async (_event, input: unknown) => {
+    requireIdle();
+    const request = input as { clipId?: unknown; time?: unknown } | null;
+    const clip = projects.activeClip;
+    const projectId = projects.activeProjectId;
+    if (!clip || !projectId || request?.clipId !== clip.id ||
+        typeof request.time !== 'number' || !Number.isFinite(request.time) ||
+        request.time < clip.start || request.time >= clip.end) {
+      throw new Error('선택된 클립의 미리보기 구간을 확인하세요.');
+    }
+    const videoId = clip.source === 'youtube' ? projects.activeYoutubeVideoId : null;
+    frameBusy = true;
+    frameCancelled = false;
+    frameTask = new FramePreviewTask();
+    try {
+      const local = clip.source === 'local' ? projects.activeSource : null;
+      const binding = clip.source === 'youtube' && projects.youtubeBinding
+        ? await projects.renderableYouTubeSource() : null;
+      let path = local?.path ?? binding?.path ?? '';
+      let offset = binding?.offset ?? 0;
+      if (clip.source === 'youtube' && !binding) {
+        if (!videoId) throw new Error('YouTube 원본 정보가 없습니다.');
+        frameSourceTask = new PersonalVideoTask();
+        const acquired = await frameSourceTask.acquire(videoId, clip.end, () => {});
+        path = acquired.path;
+        offset = 0;
+      }
+      if (frameCancelled) return { status: 'cancelled' as const };
+      if (!path) throw new Error('프레임을 가져올 미디어가 없습니다.');
+      const frame = await frameTask.capture(path, request.time + offset);
+      if (frameCancelled) return { status: 'cancelled' as const };
+      if (projects.activeProjectId !== projectId || projects.activeClip?.id !== clip.id) {
+        throw new Error('미리보기 생성 중 선택된 클립이 변경되었습니다.');
+      }
+      return { status: 'completed' as const, image: frame };
+    } catch (cause) {
+      if (frameCancelled) return { status: 'cancelled' as const };
+      throw cause;
+    } finally {
+      frameSourceTask = null;
+      frameTask = null;
+      frameBusy = false;
+      frameCancelled = false;
+    }
+  });
+  ipcMain.handle('preview:cancel', () => {
+    frameCancelled = true;
+    frameTask?.cancel();
+    frameSourceTask?.cancel();
+  });
+
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
     if (renderBusy || sourceBusy || sttBusy || analysisBusy || sttModelBusy || publisher.isBusy) throw new Error('이미 모델 설치, 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
@@ -433,4 +489,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => { analysisTask?.cancel(); personalTask?.cancel(); currentTask?.cancel(); sttTask?.cancel(); sttPersonalTask?.cancel(); });
+app.on('before-quit', () => { frameTask?.cancel(); frameSourceTask?.cancel(); analysisTask?.cancel(); personalTask?.cancel(); currentTask?.cancel(); sttTask?.cancel(); sttPersonalTask?.cancel(); });
