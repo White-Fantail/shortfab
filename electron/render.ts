@@ -1,3 +1,4 @@
+import { externalToolEnv } from './tool-env.js';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rename, rm, stat } from 'node:fs/promises';
@@ -43,7 +44,7 @@ export class RenderTask {
     ];
     try {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(ffmpegBin(), args, { windowsHide: true });
+        const child = spawn(ffmpegBin(), args, { windowsHide: true, env: externalToolEnv() });
         this.child = child;
         let stderr = '';
         let stdoutBuffer = '';
