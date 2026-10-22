@@ -233,6 +233,8 @@ function App() {
       if (editVersion.current === version) {
         dirtyRef.current = false;
         setDirty(false);
+        setError('');
+        setStatus(`프로젝트 저장됨 · ${updated.clips.length}개 클립`);
       }
     });
     saveQueue.current = task.catch(() => {});
@@ -388,7 +390,10 @@ function App() {
       const previous = youtubeVideoId(current.youtubeUrl);
       const incoming = youtubeVideoId(value);
       if (previous === incoming) return { ...current, youtubeUrl: value };
-      const clips = current.clips.filter((item) => item.source !== 'youtube');
+      // Orphaned local clips left by older projects cannot render without an attached asset.
+      // Do not carry them into a new YouTube-only project.
+      const clips = current.clips.filter((item) =>
+        item.source !== 'youtube' && (item.source !== 'local' || !!projectRef.current?.media));
       return { ...current, youtubeUrl: value, youtubeDuration: null, clips,
         selectedClipId: clips.find((item) => item.id === current.selectedClipId)?.id ?? clips[0]?.id ?? null };
     });
