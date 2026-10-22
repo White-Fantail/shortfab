@@ -625,20 +625,7 @@ function App() {
       setAnalysis(result.analysis);
       setRecommendationPreview(null);
       setSelectedRecommendations(result.analysis.candidates[0] ? [result.analysis.candidates[0].id] : []);
-      // Proposed metadata never replaces any accepted clip or user-edited title/markers.
-      // This is a draft-only change, because the analysis job is already finished.
-      const base = draftRef.current;
-      if (base) {
-        changeDraft((edits) => ({
-          ...edits,
-          wizard: proposeStep(normalizeWizard(edits.wizard, edits.clips),
-            edits.selectedClipId, 'clips', {
-              recommendationCount: result.analysis.candidates.length,
-              analysisVersion: result.analysis.engineVersion,
-              mode,
-            }),
-        }));
-      }
+      // Only the cached proposals change here. Already accepted clips stay untouched.
       if (!result.analysis.candidates.length) {
         setAnalysisError(result.analysis.note ?? '연속된 대사가 부족해 클립을 추천하지 못했습니다. 직접 선택을 이용하세요.');
       }
@@ -667,7 +654,15 @@ function App() {
           width: 720, subtitles: null,
         }));
       if (!additions.length) return current;
-      return { ...current, clips: [...current.clips, ...additions], selectedClipId: additions[0].id };
+      const clips = [...current.clips, ...additions];
+      let proposed = normalizeWizard(current.wizard, clips);
+      for (const item of additions) {
+        proposed = proposeStep(proposed, item.id, 'clips', {
+          start: item.start, end: item.end, title: item.title,
+          analyzer: analysis.engineVersion, mode: analysis.mode,
+        });
+      }
+      return { ...current, clips, wizard: proposed, selectedClipId: additions[0].id };
     });
     const first = selected[0];
     setRecommendationPreview(null);
