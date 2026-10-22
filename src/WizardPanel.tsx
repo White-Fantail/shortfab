@@ -4,7 +4,7 @@ import { StyleGallery } from './StyleGallery';
 import { validateLayout } from './shared/layout-styles';
 import { selectShortStyle, fixedPositions, defaultFixedSlot, defaultFixedSlots, type FixedSlot, type FixedPosition } from './shared/short-styles';
 import { splitNarration, type NarrationVoice } from './shared/narration';
-import type { SubtitleCue, SubtitleTrack } from './shared/subtitles';
+import type { SubtitleCue } from './shared/subtitles';
 import { WIZARD_STEPS, stepPlan, type WizardFields, type WizardRecord, type WizardStep } from './shared/wizard';
 import type { RenderProgress } from './shared/contracts';
 import type { ModelInstallProgress, SttLanguage, SttStatus } from './shared/stt';
@@ -521,6 +521,26 @@ export function WizardPanel(props: Props) {
       {clip?.style && fixedPositions(clip.style.id).length > 0 && <section className="wizard-fixed-editor">
         <strong>선택한 스타일의 고정 콘텐츠</strong>
         <p className="hint">영상 내내 표시됩니다. 변경하면 스타일 카드에서도 동일하게 확인할 수 있습니다.</p>
+        <div className="wizard-fixed-live" aria-label="고정 콘텐츠 실시간 시안">
+          <div className="wizard-fixed-live-portrait">
+            {(props.frameImage || youtubeId) && <img className="style-thumb-primary" alt=""
+              src={props.frameImage || `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`} />}
+            {fixedPositions(clip.style.id).map((position) => {
+              const slot = clip.style!.fixed?.[position] ?? defaultFixedSlot(position);
+              return <span className={`style-example-fixed fixed-${position}`} key={position}
+                style={slot.kind === 'text' ? { color: slot.color,
+                  background: slot.background ? 'rgba(10,10,18,.82)' : 'transparent',
+                  fontSize: `${Math.round(slot.size * 0.26)}px` } : undefined}>
+                {slot.kind === 'text' ? slot.text : slot.dataUrl
+                  ? <img alt="" src={slot.dataUrl}
+                    style={{ maxWidth: `${slot.scale}%`, maxHeight: `${slot.scale}%` }} />
+                  : '이미지 선택'}
+              </span>;
+            })}
+            <span className="style-example-text">나레이션 자막 미리보기</span>
+          </div>
+          <small>선택된 클립에 적용되는 고정 영역 시안입니다. 실제 출력은 영상 전체 구간에 합성됩니다.</small>
+        </div>
         {fixedPositions(clip.style.id).map((position) => {
           const slot = clip.style!.fixed?.[position] ?? defaultFixedSlot(position);
           return <div className="wizard-fixed-slot" key={position}>

@@ -587,3 +587,12 @@
   .wizard-clip-scroll { max-height:70vh; }
   .wizard-fixed-properties { grid-template-columns:1fr 1fr; }
 }
+
+/* Live fixed-slot preview inside narration step. */
+.wizard-fixed-live { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.wizard-fixed-live-portrait { position:relative; width:95px; height:169px; overflow:hidden;
+  border:2px solid #56486b; border-radius:9px; background:#171626; flex:0 0 auto; }
+.wizard-fixed-live-portrait .style-example-fixed { min-height:12%; }
+.wizard-fixed-live-portrait .style-example-text { position:absolute; z-index:2; bottom:22%;
+  left:7%; right:7%; text-align:center; color:white; font-weight:750; font-size:10px; text-shadow:0 2px 3px black; }
+.wizard-fixed-live > small { flex:1 1 120px; font-size:11px; line-height:1.6; color:#b6b1c7; }

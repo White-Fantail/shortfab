@@ -77,7 +77,7 @@ describe('FFmpeg PNG overlay composition without libass', () => {
 });
 
 describe('sandboxed caption canvas script', () => {
-  it('parses and draws Korean captions and a separate hook using only local canvas', () => {
+  it('parses and draws Korean captions and a separate hook using only local canvas', async () => {
     const drawn: string[] = [];
     const canvas = {
       width: 0, height: 0,
@@ -94,7 +94,7 @@ describe('sandboxed caption canvas script', () => {
       hook: { text: 'Watch this!', style: 'banner' } };
     const run = new Script('(' + CAPTION_CANVAS_SCRIPT_FOR_TEST + ')(' +
       JSON.stringify(payload) + ')');
-    const result = run.runInNewContext({
+    const result = await run.runInNewContext({
       document: { createElement: () => canvas },
     });
     expect(result).toBe('data:image/png;base64,AAAA');
@@ -102,5 +102,26 @@ describe('sandboxed caption canvas script', () => {
     expect(canvas.height).toBe(1280);
     expect(drawn).toContain('안녕하세요');
     expect(drawn).toContain('Watch this!');
+  });
+  it('renders fixed top/bottom text independently of spoken cues', async () => {
+    const text: string[] = [];
+    const canvas = {
+      width: 0, height: 0,
+      getContext: () => ({
+        measureText: (v: string) => ({ width: v.length * 12 }),
+        fillText: (v: string) => text.push(v),
+        strokeText: () => {},
+        fillRect: () => {},
+      }),
+      toDataURL: () => 'data:image/png;base64,AAAA',
+    };
+    const script = new Script('(' + CAPTION_CANVAS_SCRIPT_FOR_TEST + ')(' +
+      JSON.stringify({ width: 720, preset: 'classic', cue: null, hook: null,
+        fixed: { top: { kind: 'text', text: 'TOP', color: '#ffffff', size: 48, background: true },
+          bottom: { kind: 'text', text: 'BOTTOM', color: '#ffe500', size: 38, background: false } },
+      }) + ')');
+    expect(await script.runInNewContext({ document: { createElement: () => canvas } }))
+      .toBe('data:image/png;base64,AAAA');
+    expect(text).toEqual(['TOP', 'BOTTOM']);
   });
 });
