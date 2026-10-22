@@ -25,7 +25,7 @@
 
 UI는 파일 경로·토큰·AI 키를 직접 소유하지 않는다. Electron IPC로 검증된 작업 요청/진행/결과만 주고받는다. AI 모델·TTS·장면 모델은 각기 교체 가능한 어댑터로 구성한다.
 
-## 2. 권장 도메인 모델 (AG1 상태 계약 일부 구현, 미디어/AI 합성 스키마는 목표)
+## 2. 권장 도메인 모델 (AG1 상태/AG2 전사 추천 일부 구현, 후속 AI 합성은 목표)
 
 - **Project**: id, revision, name, youtubeReference?, sourceStatus, selectedClipIds, sourceAnalysisRef?, clips[], currentWizardStep, createdAt, updatedAt.
 - **SourceAnalysis**: sourceHash/videoId, duration, language, transcriptSegments(start/end/text/confidence), optionalSceneSegments, speakerSegments, fingerprint, modelVersion, completedAt.
@@ -96,3 +96,12 @@ YouTube iframe은 원본 탐색용이다. **합성된 숏폼의 신뢰할 수 �
 ## 8. 구현/테스트 순서
 
 AG1 Wizard/StepRecord 마이그레이션 → AG2 STT/ClipRecommender → AG3 LayoutPlan/프록시 → AG4 captions → AG5 audio → AG6 CTA/Review → AG7 MP4/게시/실사용. 단위: 상태 머신·invalidations·잠금/재생성·타임코드·FFmpeg manifest. 통합: 옛 저장 프로젝트, 다중 후보 3개, 모드 전환, 취소/재열기, 출력 프리뷰 일치. 실제 Mac/Windows/Google API 검증은 별도 기록.
+
+
+## AG2 실제 로컬 추천기/캐시 설계 · 2026-10-22
+
+`analysis:start`는 Electron main에서 프로젝트·videoId·IFrame 길이·모델 유효성을 검증하고 분석 작업 잠금을 건다. `AnalyzeVideoTask`는 개인용 yt-dlp의 기존 원본 다운로드/캐시를 사용하므로 renderer에 파일 시스템 경로를 전달하지 않는다. FFprobe로 오디오 유무를 확인하고 9분 슬라이스를 로컬 FFmpeg로 16kHz mono PCM 추출, `whisper-cli` SRT 전사를 재사용한다. `parseAnalysisSrt`는 타임코드를 원본 절대 초로 변환하고 데이터 범위를 검증한다. 진행/취소 이벤트는 IPC로 전달하며 실패 시 이전 클립·전사 캐시는 보존한다.
+
+전사 결과는 `userData/analysis` 내 모델 경로+파일 메타데이터 해시/언어/영상 ID/분석 버전이 다른 별도 JSON으로 저장한다. 현재 `ClipAnalysis`는 원본 길이, 실제 분석 범위, 전사 segments, 추천 candidates, 로컬 랭킹 근거, 모델 fingerprint를 포함한다. `recommendClips`는 여러 문장을 9~60초 후보로 결합하고 유효성/겹침/말 밀집/질문·반전 표현으로 우선순위를 매긴다. **LLM 기반 서술·관심도 예측은 현재 적용되지 않는다.** 최초 60분까지 전사하며 짧은 오디오/무음은 추천 개수를 강제하지 않는다. 명시적 새 분석 외엔 캐시된 실제 전사를 재사용한다.
+
+Clip 추천 후보는 프로젝트에 추가할 때에만 `ProjectClip`으로 바뀌고 `WizardRecord.clips[clipId].steps.clips.proposed` 메타데이터로 제안 버전을 기록한다. 기존 수동 수정/승인 필드는 재추천할 때 변경되지 않는다. 추천 카드/선택은 UI의 임시 상태, 재열기 시 추천 후보는 별도 캐시에서 로드한다. Clip 승인·출력은 기존 권리/게시 분리 정책을 그대로 지킨다.
