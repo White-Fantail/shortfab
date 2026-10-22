@@ -25,7 +25,7 @@
 
 UI는 파일 경로·토큰·AI 키를 직접 소유하지 않는다. Electron IPC로 검증된 작업 요청/진행/결과만 주고받는다. AI 모델·TTS·장면 모델은 각기 교체 가능한 어댑터로 구성한다.
 
-## 2. 권장 도메인 모델 (스키마 설계, 미구현)
+## 2. 권장 도메인 모델 (AG1 상태 계약 일부 구현, 미디어/AI 합성 스키마는 목표)
 
 - **Project**: id, revision, name, youtubeReference?, sourceStatus, selectedClipIds, sourceAnalysisRef?, clips[], currentWizardStep, createdAt, updatedAt.
 - **SourceAnalysis**: sourceHash/videoId, duration, language, transcriptSegments(start/end/text/confidence), optionalSceneSegments, speakerSegments, fingerprint, modelVersion, completedAt.
@@ -39,7 +39,7 @@ UI는 파일 경로·토큰·AI 키를 직접 소유하지 않는다. Electron I
 - **RenderManifest**: compositionRevision, sourceFingerprint, layout/subtitle/audio/CTA hashes, rendererVersion, outputSpec; **RenderArtifact**: manifestHash, path, duration, size, probe/QC.
 - **PublishJob**: renderArtifactHash, account, platform, settings, userApprovedAt, state, remoteId?. 게시 자격은 원본 경로/권리 상태와 별도 검증.
 
-스키마 버전과 런타임 검증, 옛 프로젝트 안전한 마이그레이션이 필수다. v1의 ProjectClip/자막 데이터를 손실 없이 변환하고 기존 advanced 타임라인은 동일한 acceptedValue를 수정한다.
+**AG1 실제 구현:** `src/shared/wizard.ts`는 `WizardRecord`(version 1, activeStep, source, clipId별 단계 record)·`StepPlan`(status, proposalVersion, proposed, approved, lockedFields)·`SourceAnalysis`/`ClipSelection`/`RenderManifest` 기본 TypeScript 계약을 제공한다. `ProjectRecord`의 optional `wizard` 필드로 옛 schemaVersion 1 JSON을 자동 정규화하며 서버 저장 전에도 유효성을 검사한다. `reconcileWizard`는 클립 범위·제목·해상도·자막 수정 시 관련 상태만 needs_review로 바꾸며 다른 클립을 격리한다. **제안 생성·RenderManifest 출력 연동 및 상태별 비동기 job 관리, 해시 기반 그래프는 아직 구현되지 않았다.**
 
 ## 3. Step 상태 머신
 
