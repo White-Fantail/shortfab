@@ -3,6 +3,10 @@ import type { SourceResolution, StoredMediaBinding } from './sources.js';
 
 export type ClipSource = 'local' | 'youtube';
 
+// Decimal tenths can round a valid 0.2-second interval slightly below 0.2.
+export const MIN_CLIP_SECONDS = 0.2;
+export const CLIP_TIME_EPSILON = 1e-6;
+
 export interface ProjectClip {
   source: ClipSource;
   id: string;
@@ -83,22 +87,34 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     throw new Error('클립은 최대 100개까지 저장할 수 있습니다.');
   }
   const ids = new Set<string>();
-  const clips: ProjectClip[] = value.clips.map((clip) => {
+  const clips: ProjectClip[] = value.clips.map((clip, index) => {
     const source = clip?.source ?? 'local'; // Older projects have local clips with no discriminator.
+    const label = `클립 ${index + 1}`;
     const limit = source === 'youtube' ? youtubeDuration : sourceDuration;
     if (source === 'local' && sourceDuration === null) {
       throw new Error('영상 원본을 먼저 연결해 주세요.');
     }
-    if (!clip || (source !== 'youtube' && source !== 'local') ||
-      (source === 'youtube' && (!youtubeVideoId(value.youtubeUrl!) || youtubeDuration === null)) ||
-      (source === 'local' && sourceDuration === null) ||
-      !isProjectId(clip.id) || ids.has(clip.id) ||
-      typeof clip.title !== 'string' || !clip.title.trim() || clip.title.length > 100 ||
-      !Number.isFinite(clip.start) || !Number.isFinite(clip.end) ||
-      clip.start < 0 || clip.end - clip.start < 0.2 ||
-      (limit !== null && clip.end > limit + 0.02) ||
-      (clip.width !== 720 && clip.width !== 1080)) {
-      throw new Error('클립 이름, 구간 또는 해상도를 확인해 주세요.');
+    if (!clip || (source !== 'youtube' && source !== 'local')) {
+      throw new Error(`${label}: 원본 종류가 올바르지 않습니다.`);
+    }
+    if (source === 'youtube' && (!youtubeVideoId(value.youtubeUrl!) || youtubeDuration === null)) {
+      throw new Error(`${label}: YouTube 영상 길이를 불러온 뒤 저장해 주세요.`);
+    }
+    if (!isProjectId(clip.id) || ids.has(clip.id)) {
+      throw new Error(`${label}: 클립 식별자가 올바르지 않거나 중복되었습니다.`);
+    }
+    if (typeof clip.title !== 'string' || !clip.title.trim() || clip.title.length > 100) {
+      throw new Error(`${label}: 이름을 1~100자로 입력해 주세요.`);
+    }
+    if (!Number.isFinite(clip.start) || !Number.isFinite(clip.end) ||
+        clip.start < 0 || clip.end - clip.start < MIN_CLIP_SECONDS - CLIP_TIME_EPSILON) {
+      throw new Error(`${label}: IN/OUT 구간을 확인해 주세요 (최소 0.2초).`);
+    }
+    if (limit !== null && clip.end > limit + 0.02) {
+      throw new Error(`${label}: OUT 지점이 영상 길이(${limit.toFixed(1)}초)를 초과합니다.`);
+    }
+    if (clip.width !== 720 && clip.width !== 1080) {
+      throw new Error(`${label}: 해상도는 720p 또는 1080p여야 합니다.`);
     }
     ids.add(clip.id);
     return {
@@ -118,4 +134,14 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     youtubeUrl: value.youtubeUrl.trim(), youtubeDuration, clips,
     selectedClipId: value.selectedClipId,
   };
+}
+
+/** Invalid intermediate edits stay local until corrected. */
+export function projectEditValidationError(input: unknown, sourceDuration: number | null): string | null {
+  try {
+    validateProjectEdits(input, sourceDuration);
+    return null;
+  } catch (cause) {
+    return cause instanceof Error ? cause.message : '편집 내용을 확인해 주세요.';
+  }
 }

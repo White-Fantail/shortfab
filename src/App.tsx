@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { youtubeVideoId, type RenderProgress } from './shared/contracts';
 import { YouTubePreview, type YouTubeControls } from './YouTubePreview';
-import type { ProjectClip, ProjectEdits, ProjectSummary, ProjectView } from './shared/projects';
+import {
+  CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, projectEditValidationError,
+  type ProjectClip, type ProjectEdits, type ProjectSummary, type ProjectView,
+} from './shared/projects';
 import type { BindSourceRequest } from './shared/sources';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
@@ -71,15 +74,16 @@ function App() {
   const youtubeId = youtubeVideoId(draft?.youtubeUrl ?? '');
   const sourceConnected = project?.sourceStatus === 'connected';
   const sourceDuration = sourceTab === 'youtube' ? draft?.youtubeDuration ?? null : media?.duration ?? null;
+  const draftValidationError = draft ? projectEditValidationError(draft, media?.duration ?? null) : null;
   const currentTime = Math.max(0, Math.min(scrubTime ?? playhead, sourceDuration ?? 0));
   const validClip = Boolean(clip && sourceDuration !== null &&
     Number.isFinite(clip.start) && Number.isFinite(clip.end) &&
-    clip.start >= 0 && clip.end >= clip.start + 0.2 && clip.end <= sourceDuration + 0.02);
+    clip.start >= 0 && clip.end - clip.start >= MIN_CLIP_SECONDS - CLIP_TIME_EPSILON && clip.end <= sourceDuration + 0.02);
   const linked = project?.youtubeSource;
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
   // A public YouTube clip can be fetched on demand for personal export.
-  const canRender = validClip && !rendering && !busy && !publishingBusy && (
+  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && (
     (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
     (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
   );
@@ -233,6 +237,8 @@ function App() {
     const task = saveQueue.current.then(async () => {
       const active = projectRef.current;
       if (!active || active.id !== snapshot.id) return;
+      const issue = projectEditValidationError(snapshot, active.media?.duration ?? null);
+      if (issue) throw new Error(`저장 전 수정 필요: ${issue}`);
       const updated = await window.shortfab!.saveProject({ ...snapshot, revision: active.revision });
       if (projectRef.current?.id !== updated.id) return;
       projectRef.current = updated;
@@ -253,17 +259,19 @@ function App() {
   }
 
   useEffect(() => {
-    if (!dirty || !draft || busy || rendering || publishingBusy) return;
+    if (!dirty || !draft || draftValidationError || busy || rendering || publishingBusy) return;
     const timer = setTimeout(() => {
       void queueSave(draft, editVersion.current).catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause));
       });
     }, 650);
     return () => clearTimeout(timer);
-  }, [draft, dirty, busy, rendering]);
+  }, [draft, dirty, draftValidationError, busy, rendering, publishingBusy]);
 
   async function flushEdits() {
     if (dirtyRef.current && draftRef.current) {
+      const issue = projectEditValidationError(draftRef.current, projectRef.current?.media?.duration ?? null);
+      if (issue) throw new Error(`저장 전 수정 필요: ${issue}`);
       await queueSave(draftRef.current, editVersion.current);
     } else {
       await saveQueue.current;
@@ -554,7 +562,8 @@ function App() {
           {projects.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.clipCount} clips</option>)}
         </select>
         <button disabled={busy || rendering || !project} onClick={() => void newProject()}>+ 새 프로젝트</button>
-        <span className="save-indicator" aria-live="polite">{dirty ? '변경 중 · 자동 저장' : '저장됨'}</span>
+        <span className="save-indicator" aria-live="polite">{dirty
+          ? (draftValidationError ? '수정 필요 · 저장 대기' : '변경 중 · 자동 저장') : '저장됨'}</span>
       </div>
 
       <div className="workspace">
@@ -564,6 +573,8 @@ function App() {
           <label htmlFor="project-title">프로젝트 이름</label>
           <input id="project-title" value={draft?.title ?? ''} disabled={!draft || busy || rendering}
             onChange={(event) => changeDraft((current) => ({ ...current, title: event.target.value }))} />
+          {dirty && draftValidationError &&
+            <p className="warning" role="alert">저장 전 수정 필요: {draftValidationError}</p>}
           <div className="tab-group source-tabs">
             <button className={sourceTab === 'youtube' ? 'active' : ''} onClick={() => selectSource('youtube')}>YouTube 탐색</button>
             <button className={sourceTab === 'local' ? 'active' : ''} onClick={() => selectSource('local')}>로컬 원본</button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateProjectEdits } from './projects';
+import { projectEditValidationError, validateProjectEdits } from './projects';
 
 const projectId = 'ad313e51-6d15-4b1f-bd85-7ef3b5dd50d0';
 const clipId = '9f60d241-05d2-42db-b332-973597172942';
@@ -62,6 +62,27 @@ describe('versioned project edit schema', () => {
     expect(youtube.clips[0].source).toBe('youtube');
     expect(youtube.clips[0].start).toBe(10);
     expect(youtube.youtubeDuration).toBe(185);
+  });
+
+  it('accepts exactly 0.2-second decimal clip ranges', () => {
+    const result = validateProjectEdits({
+      ...valid, clips: [{ ...valid.clips[0], start: 1.1, end: 1.3 }],
+    }, 120);
+    expect(result.clips[0].end - result.clips[0].start).toBeCloseTo(0.2);
+    expect(projectEditValidationError(result, 120)).toBeNull();
+  });
+
+  it('returns specific draft feedback for temporary invalid marker, name, or duration', () => {
+    expect(projectEditValidationError({
+      ...valid, clips: [{ ...valid.clips[0], start: 40, end: 32 }],
+    }, 120)).toContain('IN/OUT');
+    expect(projectEditValidationError({
+      ...valid, clips: [{ ...valid.clips[0], title: '' }],
+    }, 120)).toContain('이름');
+    expect(projectEditValidationError({
+      ...valid, clips: [{ ...valid.clips[0], end: 121 }],
+    }, 120)).toContain('영상 길이');
+    expect(projectEditValidationError(valid, 120)).toBeNull();
   });
 
   it('rejects YouTube clips without metadata or beyond duration, local clips without file', () => {

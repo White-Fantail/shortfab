@@ -76,6 +76,8 @@ Mac에서는 먼저 `brew install yt-dlp ffmpeg`를 실행합니다. YouTube 링
 
 프로젝트는 앱 사용자 데이터 폴더의 `projects/*.json`에 자동 저장됩니다. 프로젝트 선택기로 이전 프로젝트를 다시 열고, 원본 파일을 옮긴 경우 **원본 파일 재연결**을 선택하세요. 원본 파일은 프로젝트 JSON에 복사되지 않습니다.
 
+**편집 중 자동 저장:** 클립 이름을 지우거나 IN/OUT 값을 입력하다 일시적으로 유효하지 않은 상태가 되면 Electron 저장 요청을 보류하고 `수정 필요 · 저장 대기`를 표시합니다. 올바른 이름·구간·해상도를 다시 설정하면 자동 저장이 재개됩니다. 잘못된 상태에서 프로젝트 이동/MP4 익스포트는 차단되어 편집값이 유실되지 않습니다.
+
 YouTube 업로드 개발 시 Desktop OAuth 클라이언트 ID를 `SHORTFAB_GOOGLE_CLIENT_ID`로 설정하고, OAuth/OS 암호화 저장소 조건을 충족해야 합니다. 자세한 단계와 실계정 검증 체크리스트는 [Phase 2 YouTube 문서](docs/PHASE2_YOUTUBE.md)를 참고하세요.
 
 실험용 앱은 ffmpeg/ffprobe를 직접 번들링하지 않습니다. Electron vs Tauri, 코드 서명과 최종 배포는 Phase 0 검증 후 확정합니다.
