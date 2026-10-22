@@ -175,3 +175,14 @@ macOS에서 `brew install yt-dlp ffmpeg` 설치 후 `npm run dev`로 시작합�
 - 후보가 5개보다 적으면 더미 추천 추가 없음. 무음/오디오 트랙 없음/모델·yt-dlp 누락 및 접근 제한 영상에서는 오류/수동 선택을 확인.
 - 30분 영상과 최초 60분 분석 상한, 프로그레스, 취소→재시도, 기존 수동 클립·승인 필드 보존, 모델/언어 변경 시 캐시 무효화 확인.
 - CI: `npm run check && npm run lint && npm test && npm run build`; `src/shared/recommendations.test.ts` 및 `electron/analyze.test.ts`는 오프라인 합성 실험이며 실제 Whisper 모델/YouTube 네트워크 테스트가 아님.
+
+
+## AG3 스타일 갤러리 E2E 검증 (2026-10-22 dev)
+
+AG2 실제 사용자 실기 확인은 아직 대기. 새 AG3는 자동 인물 분석이 아니라 **03 화면/04 자막의 스타일 카드 탐색 및 선택**이다. [상세](STYLE_GALLERY.md).
+
+- `npm run dev` → URL과 후보 클립(AG2 추천 또는 수동) 저장 → 03 화면: 좌우 슬라이드/화살표 4개 카드 선택 → 프레임 실제 불러오기(로컬 FFmpeg, 취소/오류) → 0~100% 초점 변경 → 720/1080p.
+- 04 자막: 4개 카드 스와이프 → 다른 자막 프리셋 선택이 기존 수동/Whisper cue를 지우지 않는지 확인.
+- 03 화면에서 4종 다른 스타일 MP4 출력·ffprobe(720x1280 또는 1080x1920), 원본 소리/자막, 블러 전체 보기의 배경 합성, 다른 클립 독립 설정, 저장 후 재실행.
+- 스타일 수정 후 과거 익스포트의 YouTube 게시 승인이 거절되는지 확인. legacy 프로젝트는 기존과 같은 center crop으로 열려야 함.
+- `npm run check && npm run lint && npm test && npm run build` 및 `src/shared/layout-styles.test.ts`, `electron/layout-render.test.ts`의 자동 테스트는 **실기 수용과 별개**로 기록.
