@@ -213,3 +213,14 @@
 }
 .timeline-current { color: #fff; }
 .timeline-clock-separator { font-weight: 400; color: #77768b; }
+
+/* One consistent YouTube transport: native iframe seek bar is hidden. */
+.timeline-leading { display:flex; align-items:center; gap:10px; min-width:0; }
+.timeline-play {
+  width:30px; height:30px; min-width:30px;
+  padding:0; margin:0; border:1px solid #5d507d;
+  border-radius:7px; background:#423660; color:#fff;
+  font-size:13px; line-height:1;
+}
+.timeline-play:hover:not(:disabled) { background:#59477e; }
+.timeline-top { gap:12px; }
