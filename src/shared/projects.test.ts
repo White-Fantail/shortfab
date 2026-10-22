@@ -64,6 +64,22 @@ describe('versioned project edit schema', () => {
     expect(youtube.youtubeDuration).toBe(185);
   });
 
+  it('roundtrips clip captions and remains compatible with legacy caption-free JSON', () => {
+    const subtitle = { preset: 'classic', cues: [{
+      id: 'subtitle-1', start: 0, end: 2, text: '안녕하세요',
+    }] };
+    const saved = validateProjectEdits({
+      ...valid, clips: [{ ...valid.clips[0], subtitles: subtitle }],
+    }, 120);
+    expect(saved.clips[0].subtitles).toEqual(subtitle);
+    expect(validateProjectEdits(valid, 120).clips[0].subtitles).toBeNull();
+    expect(() => validateProjectEdits({
+      ...valid, clips: [{ ...valid.clips[0], subtitles: {
+        ...subtitle, cues: [{ ...subtitle.cues[0], end: 35 }],
+      } }],
+    }, 120)).toThrow('자막');
+  });
+
   it('accepts exactly 0.2-second decimal clip ranges', () => {
     const result = validateProjectEdits({
       ...valid, clips: [{ ...valid.clips[0], start: 1.1, end: 1.3 }],

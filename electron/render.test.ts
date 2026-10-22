@@ -41,7 +41,10 @@ describe('YouTube time mapping into three MP4 renders', () => {
           ...mapped, sourceId: binding.sourceAssetId, width: 720,
         }, info.duration);
         const output = join(folder, 'short-' + index + '.mp4');
-        await new RenderTask().run(source, output, request, () => {});
+        await new RenderTask().run(source, output, request, () => {},
+          index === 0 ? { preset: 'boxed', cues: [
+            { id: 'caption-1', start: 0.15, end: 0.85, text: '테스트 한글' },
+          ] } : null);
         const created = await probeMedia(output);
         expect(created.width).toBe(720);
         expect(created.height).toBe(1280);
