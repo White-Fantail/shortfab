@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { SeekTimeGuard } from './shared/timeline.js';
 
 interface Player {
   seekTo(seconds: number, allowSeekAhead: boolean): void;
@@ -80,13 +81,16 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
 ) {
   const host = useRef<HTMLDivElement>(null);
   const player = useRef<Player | null>(null);
+  const seekGuard = useRef(new SeekTimeGuard());
   const latest = useRef({ start, end, loop, onTime, onDuration });
   const [error, setError] = useState('');
   latest.current = { start, end, loop, onTime, onDuration };
 
   useImperativeHandle(ref, () => ({
     seek(time) {
-      player.current?.seekTo(time, true);
+      if (!player.current) return;
+      seekGuard.current.seek(time);
+      player.current.seekTo(time, true);
       latest.current.onTime(time);
     },
     play() { player.current?.playVideo(); },
@@ -94,6 +98,7 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
   }), []);
 
   useEffect(() => {
+    seekGuard.current.reset();
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     let instance: Player | null = null;
@@ -113,12 +118,15 @@ export const YouTubePreview = forwardRef<YouTubeControls, Props>(function YouTub
               if (Number.isFinite(duration) && duration > 0) {
                 latest.current.onDuration(videoId, duration);
               }
-              const time = instance.getCurrentTime();
-              if (!Number.isFinite(time)) return;
+              // seekTo() is asynchronous. Ignore old player samples until the
+              // requested position is reached, avoiding a backwards jump.
+              const time = seekGuard.current.sample(instance.getCurrentTime());
+              if (time === null) return;
               const { start: from, end: to, loop: repeats } = latest.current;
               if (to !== null && from !== null &&
                   instance.getPlayerState() === 1 && time >= to - 0.08) {
                 if (repeats) {
+                  seekGuard.current.seek(from);
                   instance.seekTo(from, true);
                   instance.playVideo();
                   latest.current.onTime(from);
