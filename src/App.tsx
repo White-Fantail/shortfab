@@ -12,6 +12,7 @@ import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } fr
 import { WizardPanel, WizardProgress } from './WizardPanel';
 import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
 import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
+import { layoutSignature } from './shared/layout-styles';
 
 type SourceTab = 'local' | 'youtube';
 type OutputTab = 'export' | 'publish';
@@ -113,6 +114,7 @@ function App() {
     publishing?.artifact?.end === clip?.end &&
     publishing?.artifact?.width === clip?.width &&
     publishing?.artifact?.subtitleSignature === JSON.stringify(clip?.subtitles ?? null) &&
+    publishing?.artifact?.layoutSignature === layoutSignature(clip?.layout) &&
     publishing?.artifact?.sourceBindingId === (clip?.source === 'youtube' ? linkedAsset?.sourceAssetId ?? null : null);
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
   const canPublish = !analysisBusy && publishReady &&
