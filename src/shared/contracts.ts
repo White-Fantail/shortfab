@@ -19,6 +19,7 @@ export interface RenderRequest {
   start: number;
   end: number;
   width: OutputWidth;
+  compositionClipIds?: string[]; // Wizard: exact persisted ordered clip IDs, not arbitrary media ranges.
 }
 
 export interface RenderProgress {
@@ -48,7 +49,13 @@ export function validateRenderRequest(value: unknown, duration: number): RenderR
     throw new Error('IN/OUT 구간을 다시 확인해 주세요.');
   }
   if (width !== 720 && width !== 1080) throw new Error('지원하지 않는 출력 해상도입니다.');
-  return { sourceId, start, end, width };
+  const ids = request.compositionClipIds;
+  if (ids !== undefined && (!Array.isArray(ids) || ids.length === 0 || ids.length > 100 ||
+      ids.some((id) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) ||
+      new Set(ids).size !== ids.length)) {
+    throw new Error('쇼츠 구성 클립 목록이 올바르지 않습니다.');
+  }
+  return { sourceId, start, end, width, ...(ids ? { compositionClipIds: ids } : {}) };
 }
 
 export function cropFilter(width: OutputWidth): string {
