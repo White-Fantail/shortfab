@@ -186,3 +186,8 @@ AG2 실제 사용자 실기 확인은 아직 대기. 새 AG3는 자동 인물 �
 - 03 화면에서 4종 다른 스타일 MP4 출력·ffprobe(720x1280 또는 1080x1920), 원본 소리/자막, 블러 전체 보기의 배경 합성, 다른 클립 독립 설정, 저장 후 재실행.
 - 스타일 수정 후 과거 익스포트의 YouTube 게시 승인이 거절되는지 확인. legacy 프로젝트는 기존과 같은 center crop으로 열려야 함.
 - `npm run check && npm run lint && npm test && npm run build` 및 `src/shared/layout-styles.test.ts`, `electron/layout-render.test.ts`의 자동 테스트는 **실기 수용과 별개**로 기록.
+
+
+## AG4 자막·Hook 실기 점검 (dev)
+
+[AG4 검증 문서](AG4_CAPTIONS.md)대로 YouTube 한/영 실제 발화형 소스를 선택하고 AG2 전사를 완료한 뒤 04 자막에서 캐시 대사를 가져온다. 8종 슬라이드 카드를 선택하고 문장/시간 수정·전체 큐 강조·Hook OFF/ON(배경 박스/일반)을 테스트한다. Whisper 새로 전사/모델 누락·취소·기존 자막 교체 취소, 자막 30개 초과와 타임코드 중복 검증, 다른 클립/재열기 보존, 실제 MP4의 자막/Hook 영역·폰트/싱크·오디오 보존을 함께 검토한다. CI 타입/린트/합성 MP4 통과와 사용자 실기 확인은 분리한다.
