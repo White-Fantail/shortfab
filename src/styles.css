@@ -249,3 +249,10 @@
 .subtitle-bold{color:#ffe500;font-size:clamp(14px,1.6vw,26px);font-weight:900}
 .subtitle-minimal{font-size:clamp(11px,1.15vw,18px);font-weight:500}
 .subtitle-boxed{background:rgba(15,15,15,.8);padding:5px 6px;border-radius:3px}
+
+/* Local speech-to-text settings stay inside the collapsed caption editor. */
+.stt-controls{padding:10px 0 14px;border-bottom:1px solid #333644;margin-bottom:12px}
+.stt-controls>label{margin:6px 0 3px}
+.stt-setup{display:flex;flex-direction:column;gap:4px;font-size:10px;color:#aeb5cb;margin:8px 0;overflow-wrap:anywhere}
+.stt-controls button{margin-top:7px;font-size:11px;padding:9px}
+.stt-controls code{font-size:10px;user-select:text}

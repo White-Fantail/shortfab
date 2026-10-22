@@ -7,6 +7,7 @@ import {
 } from './shared/projects';
 import type { BindSourceRequest } from './shared/sources';
 import { SUBTITLE_PRESETS, type SubtitleTrack } from './shared/subtitles';
+import { MAX_STT_SECONDS, type SttLanguage, type SttStatus } from './shared/stt';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 
 type SourceTab = 'local' | 'youtube';
@@ -50,6 +51,10 @@ function App() {
   const [progress, setProgress] = useState<RenderProgress>({ percent: 0, seconds: 0 });
   const [personalToolReady, setPersonalToolReady] = useState<boolean | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [sttBusy, setSttBusy] = useState(false);
+  const [sttLanguage, setSttLanguage] = useState<SttLanguage>('auto');
+  const [sttSetup, setSttSetup] = useState<SttStatus | null>(null);
+  const [sttMessage, setSttMessage] = useState('');
   const [publishing, setPublishing] = useState<PublishOverview | null>(null);
   const [publishingBusy, setPublishingBusy] = useState(false);
   const [publishError, setPublishError] = useState('');
@@ -86,7 +91,7 @@ function App() {
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
   // A public YouTube clip can be fetched on demand for personal export.
-  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && (
+  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && (
     (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
     (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
   );
@@ -195,7 +200,13 @@ function App() {
         else if (value.phase === 'render') setStatus('세로형 MP4 인코딩 중…');
       }
     });
+    const unsubscribeStt = window.shortfab?.onSttProgress((event) => {
+      if (live) setSttMessage(event.message);
+    });
     if (window.shortfab) {
+      void window.shortfab.sttStatus()
+        .then((result) => { if (live) setSttSetup(result); })
+        .catch(() => { if (live) setSttSetup(null); });
       void window.shortfab.personalToolAvailable()
         .then((ready) => { if (live) setPersonalToolReady(ready); })
         .catch(() => { if (live) setPersonalToolReady(false); });
@@ -221,7 +232,7 @@ function App() {
         }
       })();
     }
-    return () => { live = false; unsubscribe?.(); unsubscribePublish?.(); };
+    return () => { live = false; unsubscribe?.(); unsubscribePublish?.(); unsubscribeStt?.(); };
   }, []);
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
@@ -473,6 +484,60 @@ function App() {
     updateSubtitles((value) => ({
       ...value, cues: value.cues.filter((cue) => cue.id !== id),
     }));
+  }
+
+  async function chooseSttModel() {
+    if (!window.shortfab || busy || rendering || publishingBusy || sttBusy) return;
+    setBusy(true);
+    setSttMessage('');
+    try {
+      setSttSetup(await window.shortfab.chooseSttModel());
+    } catch (cause) {
+      setSttMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateSubtitles() {
+    if (!clip || !window.shortfab || !validClip || !!draftValidationError ||
+        busy || rendering || publishingBusy || sttBusy ||
+        !sttSetup?.engineAvailable || !sttSetup.modelAvailable) return;
+    const duration = clip.end - clip.start;
+    if (duration > MAX_STT_SECONDS) {
+      setSttMessage('자동 자막은 10분 이하 클립에서 지원합니다. IN/OUT을 짧게 지정해 주세요.');
+      return;
+    }
+    if (clip.subtitles?.cues.length && !window.confirm('기존 자막을 자동 인식 결과로 교체할까요? 취소하면 기존 자막이 유지됩니다.')) return;
+    const selected = clip.id;
+    const sourceId = clip.source === 'youtube'
+      ? linkedAsset?.sourceAssetId ?? (youtubeId ? 'youtube:' + youtubeId : null)
+      : media?.id;
+    if (!sourceId) return;
+    setBusy(true);
+    setSttBusy(true);
+    setSttMessage('자동 자막 생성 준비 중…');
+    setError('');
+    try {
+      await flushEdits();
+      const result = await window.shortfab.transcribeClip({ sourceId, language: sttLanguage });
+      if (result.status === 'cancelled') {
+        setSttMessage('자동 자막 생성이 취소되었습니다. 기존 자막은 유지됩니다.');
+      } else if (draftRef.current?.selectedClipId === selected) {
+        changeDraft((current) => ({
+          ...current,
+          clips: current.clips.map((item) => item.id === selected ? {
+            ...item, subtitles: result.track,
+          } : item),
+        }));
+        setSttMessage(`자동 자막 ${result.track.cues.length}개 생성 완료. 내용을 검토하고 수정한 뒤 MP4로 출력하세요.`);
+      }
+    } catch (cause) {
+      setSttMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSttBusy(false);
+      setBusy(false);
+    }
   }
 
   function addClip() {
@@ -747,7 +812,35 @@ function App() {
             <div className="duration"><span>선택 구간</span><strong>{formatTime(clip.end - clip.start)}</strong></div>
             <details className="caption-editor">
               <summary>자막 편집 · {clip.subtitles?.cues.length ?? 0}개</summary>
-              <p className="hint">클립 IN을 0초로 하는 수동 자막입니다. 자막 구간·스타일은 클립별 자동 저장되고 MP4에 합성됩니다.</p>
+              <p className="hint">클립 IN을 0초로 하는 자막입니다. 로컬 음성 인식 또는 직접 입력 후 검토하고 MP4에 합성할 수 있습니다.</p>
+              <div className="stt-controls">
+                <label htmlFor="stt-language">음성 인식 언어</label>
+                <select id="stt-language" value={sttLanguage} disabled={busy || rendering}
+                  onChange={(event) => setSttLanguage(event.target.value as SttLanguage)}>
+                  <option value="auto">자동 감지</option>
+                  <option value="ko">한국어</option>
+                  <option value="en">English</option>
+                </select>
+                <div className="stt-setup">
+                  <span>{sttSetup?.engineAvailable ? '● whisper-cli 설치됨' : '○ whisper-cli 설치 필요'}</span>
+                  <span>{sttSetup?.modelAvailable ? `● 모델: ${sttSetup.modelName}` : '○ GGML 모델(.bin) 선택 필요'}</span>
+                </div>
+                <button className="secondary full" type="button" disabled={busy || rendering}
+                  onClick={() => void chooseSttModel()}>GGML 모델 파일 선택…</button>
+                <button className="primary full" type="button"
+                  disabled={!validClip || !!draftValidationError || busy || rendering ||
+                    !sttSetup?.engineAvailable || !sttSetup.modelAvailable ||
+                    clip.end - clip.start > MAX_STT_SECONDS}
+                  onClick={() => void generateSubtitles()}>
+                  {sttBusy ? '자동 자막 생성 중…' : clip.subtitles?.cues.length ? '자동 자막 다시 생성' : 'AI 자동 자막 생성'}
+                </button>
+                {sttBusy && <button className="cancel full" type="button"
+                  onClick={() => void window.shortfab?.cancelTranscription()}>자동 자막 생성 취소</button>}
+                {sttMessage && <p role="status" aria-live="polite" className="hint">{sttMessage}</p>}
+                {(!sttSetup?.engineAvailable || !sttSetup.modelAvailable) &&
+                  <p className="hint">로컬 준비: Mac <code>brew install whisper.cpp ffmpeg</code>.
+                    Whisper GGML multilingual 모델(.bin)을 직접 내려받아 선택하세요. 파일/음성은 외부 서버로 전송하지 않습니다.</p>}
+              </div>
               <label htmlFor="caption-preset">자막 스타일</label>
               <select id="caption-preset" value={clip.subtitles?.preset ?? 'classic'}
                 disabled={busy || rendering} onChange={(event) => updateSubtitles((value) => ({
@@ -781,7 +874,7 @@ function App() {
               </div>)}
               <button type="button" className="secondary full" disabled={busy || rendering || (clip.subtitles?.cues.length ?? 0) >= 30}
                 onClick={addCaption}>+ 현재 위치에 자막 추가</button>
-              <p className="hint">내용이 비었거나 시간이 겹치면 자동 저장·익스포트가 보류됩니다. 자동 음성 인식은 후속 개발입니다.</p>
+              <p className="hint">내용이 비었거나 시간이 겹치면 자동 저장·익스포트가 보류됩니다. 자동 인식 결과는 반드시 확인해 주세요.</p>
             </details>
             <button className="secondary full" disabled={!validClip || (sourceTab === 'local' && !sourceConnected) || busy || rendering}
               onClick={() => void playClip()}>▶ 선택 구간 재생</button>

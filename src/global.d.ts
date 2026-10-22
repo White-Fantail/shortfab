@@ -3,6 +3,7 @@ import type { ProjectEdits, ProjectSummary, ProjectView } from './shared/project
 import type { BindSourceRequest } from './shared/sources';
 import type { ApprovedCloudSourceRequest } from './shared/cloud';
 import type { PublishDraft, PublishJobView, PublishOverview, PublishProgress } from './shared/publishing';
+import type { SttProgress, SttRequest, SttResult, SttStatus } from './shared/stt';
 
 declare global {
   interface Window {
@@ -20,6 +21,11 @@ declare global {
       startRender(request: RenderRequest): Promise<RenderResult>;
       cancelRender(): Promise<void>;
       personalToolAvailable(): Promise<boolean>;
+      sttStatus(): Promise<SttStatus>;
+      chooseSttModel(): Promise<SttStatus>;
+      transcribeClip(request: SttRequest): Promise<SttResult>;
+      cancelTranscription(): Promise<void>;
+      onSttProgress(callback: (progress: SttProgress) => void): () => void;
       onProgress(callback: (progress: RenderProgress) => void): () => void;
       publishOverview(): Promise<PublishOverview>;
       connectYouTube(): Promise<PublishOverview>;

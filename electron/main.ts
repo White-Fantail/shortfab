@@ -7,6 +7,9 @@ import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
+import { SttTask } from './stt.js';
+import { modelValid, setSttModelPath, sttModelPath, sttStatus } from './stt-model.js';
+import { MAX_STT_SECONDS, validateSttRequest, type SttProgress, type SttResult } from '../src/shared/stt.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 import { validatePublishDraft } from '../src/shared/publishing.js';
 
@@ -20,12 +23,20 @@ let currentTask: RenderTask | null = null;
 let personalTask: PersonalVideoTask | null = null;
 let renderBusy = false;
 let sourceBusy = false;
+let sttBusy = false;
+let sttCancelled = false;
+let sttTask: SttTask | null = null;
+let sttPersonalTask: PersonalVideoTask | null = null;
+
+function reportStt(progress: SttProgress): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('stt:progress', progress);
+}
 const publisher = new YouTubePublisher((job) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('publish:progress', { job });
 });
 
 function requireIdle(): void {
-  if (renderBusy || sourceBusy || publisher.isBusy) throw new Error('진행 중인 원본 연결·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
+  if (renderBusy || sourceBusy || sttBusy || publisher.isBusy) throw new Error('진행 중인 원본 연결·자막 인식·렌더 또는 게시 작업이 끝나면 프로젝트를 변경할 수 있습니다.');
 }
 
 function openWindow(): void {
@@ -180,8 +191,90 @@ app.whenReady().then(() => {
     return publisher.refresh(id, projectId);
   });
 
+  ipcMain.handle('stt:status', () => sttStatus());
+  ipcMain.handle('stt:chooseModel', async () => {
+    requireIdle();
+    const options: OpenDialogOptions = {
+      properties: ['openFile'], filters: [{ name: 'GGML Whisper Model', extensions: ['bin'] }],
+    };
+    const chosen = mainWindow ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
+    if (chosen.canceled || !chosen.filePaths[0]) return sttStatus();
+    requireIdle();
+    await setSttModelPath(chosen.filePaths[0]);
+    return sttStatus();
+  });
+  ipcMain.handle('stt:start', async (_event, input: unknown): Promise<SttResult> => {
+    requireIdle();
+    const request = validateSttRequest(input);
+    const clip = projects.activeClip;
+    const projectId = projects.activeProjectId;
+    if (!projectId || !clip) throw new Error('자막을 생성할 클립을 먼저 선택하세요.');
+    if (clip.end - clip.start > MAX_STT_SECONDS) {
+      throw new Error('자동 자막은 10분 이하 클립에서 지원합니다. IN/OUT 구간을 줄여 주세요.');
+    }
+    const modelPath = await sttModelPath();
+    if (!await modelValid(modelPath)) throw new Error('GGML Whisper 모델(.bin)을 먼저 선택해 주세요.');
+    const videoId = projects.activeYoutubeVideoId;
+    const local = clip.source === 'local' ? projects.activeSource : null;
+    const direct = clip.source === 'youtube' && videoId !== null && request.sourceId === personalSourceId(videoId);
+    if (clip.source === 'local' && (!local || local.id !== request.sourceId)) {
+      throw new Error('로컬 영상 원본이 연결되지 않았습니다.');
+    }
+    if (clip.source === 'youtube' && !videoId) throw new Error('YouTube 원본 정보가 올바르지 않습니다.');
+    sttBusy = true;
+    sttCancelled = false;
+    try {
+      let sourcePath = local?.path ?? '';
+      let offset = 0;
+      if (clip.source === 'youtube') {
+        if (direct) {
+          sttPersonalTask = new PersonalVideoTask();
+          const acquired = await sttPersonalTask.acquire(videoId!, clip.end, () => {
+            reportStt({ phase: 'download', message: 'YouTube 음성 원본을 준비하는 중…' });
+          });
+          sourcePath = acquired.path;
+          if (clip.end > acquired.duration + 0.02) throw new Error('영상 OUT 지점이 원본 길이를 넘었습니다.');
+        } else {
+          const approved = await projects.renderableYouTubeSource();
+          if (request.sourceId !== approved.id) throw new Error('선택한 YouTube 원본이 변경되었습니다.');
+          sourcePath = approved.path;
+          offset = approved.offset;
+        }
+      }
+      if (sttCancelled) return { status: 'cancelled' };
+      sttTask = new SttTask();
+      const track = await sttTask.run({
+        sourcePath, modelPath: modelPath!, start: clip.start + offset,
+        end: clip.end + offset, language: request.language,
+        preset: clip.subtitles?.preset ?? 'classic',
+      }, (phase) => reportStt({
+        phase, message: phase === 'extract' ? '선택 구간의 음성을 분리하는 중…' : '로컬 AI로 자막을 생성하는 중…',
+      }));
+      if (sttCancelled) return { status: 'cancelled' };
+      if (projects.activeProjectId !== projectId || projects.activeClip?.id !== clip.id) {
+        throw new Error('작업 중 선택한 클립이 변경되었습니다. 자동 자막을 적용하지 않았습니다.');
+      }
+      return { status: 'completed', track };
+    } catch (error) {
+      if (sttCancelled) return { status: 'cancelled' };
+      throw error;
+    } finally {
+      sttBusy = false;
+      sttCancelled = false;
+      sttTask = null;
+      sttPersonalTask = null;
+    }
+  });
+  ipcMain.handle('stt:cancel', () => {
+    if (!sttBusy) return;
+    sttCancelled = true;
+    sttPersonalTask?.cancel();
+    sttTask?.cancel();
+  });
+
   ipcMain.handle('render:start', async (_event, input: unknown): Promise<RenderResult> => {
-    if (renderBusy || sourceBusy || publisher.isBusy) throw new Error('이미 원본 연결, 렌더 또는 게시 작업 중입니다.');
+    if (renderBusy || sourceBusy || sttBusy || publisher.isBusy) throw new Error('이미 원본 연결, 자막 인식, 렌더 또는 게시 작업 중입니다.');
     renderBusy = true; // Lock before checksum verification, which awaits filesystem I/O.
     try {
     const activeClip = projects.activeClip;
@@ -266,4 +359,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => { personalTask?.cancel(); currentTask?.cancel(); });
+app.on('before-quit', () => { personalTask?.cancel(); currentTask?.cancel(); sttTask?.cancel(); sttPersonalTask?.cancel(); });
