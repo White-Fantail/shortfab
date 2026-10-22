@@ -10,7 +10,8 @@ import { SUBTITLE_PRESETS, type SubtitleTrack } from './shared/subtitles';
 import { MAX_STT_SECONDS, type SttLanguage, type SttStatus } from './shared/stt';
 import type { PublishDraft, PublishJobView, PublishOverview, YouTubePrivacy } from './shared/publishing';
 import { WizardPanel, WizardProgress } from './WizardPanel';
-import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
+import { WIZARD_STEPS, acceptStep, newWizard, normalizeWizard, proposeStep, reconcileWizard, skipStep, type WizardFields, type WizardStep } from './shared/wizard';
+import type { AnalyzeProgress, ClipAnalysis, ClipRecommendation, RecommendationMode } from './shared/recommendations';
 
 type SourceTab = 'local' | 'youtube';
 type OutputTab = 'export' | 'publish';
@@ -35,6 +36,11 @@ function App() {
   const [draft, setDraft] = useState<ProjectEdits | null>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>('youtube');
   const [wizardMode, setWizardMode] = useState(true);
+  const [analysis, setAnalysis] = useState<ClipAnalysis | null>(null);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalyzeProgress | null>(null);
+  const [analysisError, setAnalysisError] = useState('');
+  const [selectedRecommendations, setSelectedRecommendations] = useState<string[]>([]);
   const [loopClip, setLoopClip] = useState(false);
   const [cloudUrl, setCloudUrl] = useState('');
   const [cloudError, setCloudError] = useState('');
@@ -96,7 +102,7 @@ function App() {
   const linkedAsset = linked?.state === 'ready_to_render' && linked.binding?.referenceVideoId === youtubeId
     ? linked.binding : null;
   // A public YouTube clip can be fetched on demand for personal export.
-  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && (
+  const canRender = validClip && !draftValidationError && !rendering && !busy && !publishingBusy && !sttBusy && !analysisBusy && (
     (sourceTab === 'local' && clip?.source === 'local' && sourceConnected) ||
     (sourceTab === 'youtube' && clip?.source === 'youtube' && !!youtubeId)
   );
@@ -108,7 +114,7 @@ function App() {
     publishing?.artifact?.subtitleSignature === JSON.stringify(clip?.subtitles ?? null) &&
     publishing?.artifact?.sourceBindingId === (clip?.source === 'youtube' ? linkedAsset?.sourceAssetId ?? null : null);
   const projectJobs = publishing?.jobs.filter((item) => item.projectId === project?.id) ?? [];
-  const canPublish = publishReady &&
+  const canPublish = !analysisBusy && publishReady &&
     (clip?.source !== 'youtube' || (linked?.canPublishYouTube && linkedAsset !== null)) &&
     publishing?.connected && !dirty && !rendering && !busy &&
     !publishingBusy && publishForm.madeForKids !== null && Boolean(publishForm.title.trim());
@@ -122,6 +128,10 @@ function App() {
     setProject(view);
     setDraft(edits);
     setWizardMode(true);
+    setAnalysis(null);
+    setAnalysisProgress(null);
+    setAnalysisError('');
+    setSelectedRecommendations([]);
     setCloudUrl(''); // Never carry credential-bearing signed URLs across projects.
     setCloudError('');
     setPartnerError('');
@@ -207,6 +217,9 @@ function App() {
         else if (value.phase === 'render') setStatus('세로형 MP4 인코딩 중…');
       }
     });
+    const unsubscribeAnalysis = window.shortfab?.onAnalysisProgress((event) => {
+      if (live) setAnalysisProgress(event);
+    });
     const unsubscribeStt = window.shortfab?.onSttProgress((event) => {
       if (live) setSttMessage(event.message);
     });
@@ -239,12 +252,25 @@ function App() {
         }
       })();
     }
-    return () => { live = false; unsubscribe?.(); unsubscribePublish?.(); unsubscribeStt?.(); };
+    return () => { live = false; unsubscribe?.(); unsubscribePublish?.(); unsubscribeStt?.(); unsubscribeAnalysis?.(); };
   }, []);
+
+  useEffect(() => {
+    if (!window.shortfab || !youtubeId || !draft?.youtubeDuration || analysisBusy) return;
+    let active = true;
+    const videoId = youtubeId;
+    void window.shortfab.cachedAnalysis(videoId, draft.youtubeDuration, sttLanguage)
+      .then((cached) => {
+        if (!active || !cached || cached.videoId !== videoId) return;
+        setAnalysis((prior) => prior?.videoId === videoId && prior.language === sttLanguage ? prior : cached);
+      })
+      .catch(() => { /* A cache miss must never interrupt manual editing. */ });
+    return () => { active = false; };
+  }, [youtubeId, draft?.youtubeDuration, sttLanguage, project?.id, analysisBusy]);
 
   function changeDraft(update: (current: ProjectEdits) => ProjectEdits) {
     const old = draftRef.current;
-    if (!old || publishingBusy) return;
+    if (!old || publishingBusy || analysisBusy) return;
     const candidate = update(old);
     if (candidate === old) return;
     const next = { ...candidate, wizard: reconcileWizard(candidate.wizard, old, candidate) };
@@ -428,6 +454,10 @@ function App() {
     setCloudError('');
     setPartnerError('');
     if (youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== youtubeVideoId(value)) {
+      setAnalysis(null);
+      setAnalysisProgress(null);
+      setAnalysisError('');
+      setSelectedRecommendations([]);
       // Never carry declarations of one video's rights across to another video ID.
       setRightsForm({
         rightsHolder: '', evidenceRef: '', allowClip: false, allowDerivativeEdit: false,
@@ -565,6 +595,85 @@ function App() {
       setSttBusy(false);
       setBusy(false);
     }
+  }
+
+  async function runAnalysis(mode: RecommendationMode = 'balanced', refresh = false) {
+    const current = draftRef.current;
+    const videoId = youtubeVideoId(current?.youtubeUrl ?? '');
+    if (!window.shortfab || !current || !videoId || !current.youtubeDuration ||
+        analysisBusy || busy || rendering || publishingBusy || sttBusy) return;
+    setAnalysisBusy(true);
+    setAnalysisError('');
+    setAnalysisProgress({ phase: 'cache', percent: 0, message: '분석 준비 중…' });
+    const expectedId = current.id;
+    try {
+      // Save the source ID/duration first: privileged main process verifies both.
+      await flushEdits();
+      const result = await window.shortfab.startAnalysis({
+        videoId, duration: current.youtubeDuration!, language: sttLanguage, mode, refresh,
+      });
+      if (result.status === 'cancelled') {
+        setAnalysisError('분석을 취소했습니다. 기존 후보와 클립은 유지됩니다.');
+        return;
+      }
+      if (projectRef.current?.id !== expectedId ||
+          youtubeVideoId(draftRef.current?.youtubeUrl ?? '') !== videoId) return;
+      setAnalysis(result.analysis);
+      setSelectedRecommendations(result.analysis.candidates[0] ? [result.analysis.candidates[0].id] : []);
+      // Proposed metadata never replaces any accepted clip or user-edited title/markers.
+      // This is a draft-only change, because the analysis job is already finished.
+      const base = draftRef.current;
+      if (base) {
+        changeDraft((edits) => ({
+          ...edits,
+          wizard: proposeStep(normalizeWizard(edits.wizard, edits.clips),
+            edits.selectedClipId, 'clips', {
+              recommendationCount: result.analysis.candidates.length,
+              analysisVersion: result.analysis.engineVersion,
+              mode,
+            }),
+        }));
+      }
+      if (!result.analysis.candidates.length) {
+        setAnalysisError(result.analysis.note ?? '연속된 대사가 부족해 클립을 추천하지 못했습니다. 직접 선택을 이용하세요.');
+      }
+    } catch (cause) {
+      setAnalysisError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }
+
+  function addRecommendations() {
+    if (!analysis || !draftRef.current || analysisBusy || rendering || busy) return;
+    if (analysis.videoId !== youtubeVideoId(draftRef.current.youtubeUrl) ||
+        Math.abs(analysis.duration - (draftRef.current.youtubeDuration ?? -1)) > 2) return;
+    const selected = analysis.candidates.filter((item) => selectedRecommendations.includes(item.id));
+    if (!selected.length) return;
+    const firstId = crypto.randomUUID();
+    changeDraft((current) => {
+      const existing = current.clips.filter((item) => item.source === 'youtube');
+      const additions = selected.filter((candidate) => !existing.some((item) =>
+        Math.abs(item.start - candidate.start) < 0.15 && Math.abs(item.end - candidate.end) < 0.15))
+        .slice(0, Math.max(0, 100 - current.clips.length))
+        .map((candidate, index): ProjectClip => ({
+          id: index === 0 ? firstId : crypto.randomUUID(), source: 'youtube',
+          title: candidate.title.slice(0, 100), start: candidate.start, end: candidate.end,
+          width: 720, subtitles: null,
+        }));
+      if (!additions.length) return current;
+      return { ...current, clips: [...current.clips, ...additions], selectedClipId: additions[0].id };
+    });
+    const first = selected[0];
+    if (first) moveTo(first.start);
+    setStatus('선택한 추천 후보를 클립으로 추가했습니다. 구간을 조정하고 승인하세요.');
+  }
+
+  function previewRecommendation(candidate: ClipRecommendation) {
+    if (analysisBusy || busy || rendering) return;
+    setSourceTab('youtube');
+    moveTo(candidate.start);
+    youtubePlayer.current?.play();
   }
 
   function addClipAtPlayhead() {
@@ -730,19 +839,28 @@ function App() {
 
       <div className="creation-mode">
         <button type="button" className={wizardMode ? 'active' : ''}
-          onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
+          disabled={analysisBusy} onClick={() => { setWizardMode(true); setSourceTab('youtube'); }}>단계별 제작</button>
         <button type="button" className={!wizardMode ? 'active' : ''}
-          onClick={() => setWizardMode(false)}>고급 편집</button>
+          disabled={analysisBusy} onClick={() => setWizardMode(false)}>고급 편집</button>
         <span>{wizardMode ? 'AI 추천 기능을 단계별로 추가 중 · 현재 지원 기능을 정확히 표시합니다.' : '기존 수동 타임라인 · 자막 · 게시 설정'}</span>
       </div>
 
       {wizardMode && <WizardProgress wizard={wizard} clipId={draft?.selectedClipId ?? null}
-        disabled={busy || rendering} onGoTo={wizardGoTo} />}
+        disabled={busy || rendering || analysisBusy} onGoTo={wizardGoTo} />}
       <div className={wizardMode ? 'workspace wizard-workspace' : 'workspace'}>
         {wizardMode && draft && <WizardPanel wizard={wizard} draft={draft}
           clip={clip ?? null} youtubeId={youtubeId} sourceDuration={draft.youtubeDuration}
           validClip={validClip} validationError={draftValidationError}
           ready={canRender} busy={busy} rendering={rendering} progress={progress}
+          analysis={analysis?.videoId === youtubeId ? analysis : null}
+          analysisBusy={analysisBusy} analysisProgress={analysisProgress} analysisError={analysisError}
+          analysisLanguage={sttLanguage} onAnalysisLanguage={setSttLanguage}
+          onAnalyze={(mode, refresh) => void runAnalysis(mode, refresh)}
+          onCancelAnalysis={() => void window.shortfab?.cancelAnalysis()}
+          selectedRecommendationIds={selectedRecommendations}
+          onToggleRecommendation={(id) => setSelectedRecommendations((ids) =>
+            ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id])}
+          onPreviewRecommendation={previewRecommendation} onAddRecommendations={addRecommendations}
           sttSetup={sttSetup} sttBusy={sttBusy} status={status} error={error}
           onUrl={setYoutubeUrl} onAddClip={addClipAtPlayhead}
           onSelectClip={(id, start) => {
