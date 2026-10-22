@@ -264,7 +264,7 @@ export function WizardPanel(props: Props) {
         {props.frameError && <p className="warning" role="alert">{props.frameError}</p>}
       </div>
       <StyleGallery kind="layout" videoId={youtubeId} frameImage={props.frameImage}
-        selected={validateLayout(clip?.layout).id}
+        selected={validateLayout(clip?.layout).id} focus={validateLayout(clip?.layout).focus}
         disabled={!clip || disabled} onChoose={(id) => props.onClip({ layout: layoutDefault(id as LayoutStyleId) })} />
       {clip && validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
         <span>화면 가로 중심 · {Math.round(validateLayout(clip.layout).focus)}%</span>
