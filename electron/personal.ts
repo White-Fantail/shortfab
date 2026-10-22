@@ -48,6 +48,7 @@ export class PersonalVideoTask {
       }
     } catch { /* No valid cached file. Re-acquire in a staging directory. */ }
     if (this.cancelled) throw new Error('가져오기가 취소되었습니다.');
+    progress({ phase: 'download', percent: 5, seconds: 0 });
     await mkdir(folder, { recursive: true, mode: 0o700 });
     const staging = join(folder, '.shortfab-' + randomUUID());
     await mkdir(staging, { recursive: true, mode: 0o700 });
@@ -55,7 +56,7 @@ export class PersonalVideoTask {
     const safeUrl = 'https://www.youtube.com/watch?v=' + videoId;
     const args = [
       '--ignore-config', '--no-plugin-dirs', '--no-remote-components',
-      '--no-playlist', '--no-progress', '--no-warnings', '--no-part',
+      '--no-playlist', '--newline', '--no-warnings', '--no-part',
       '--no-write-info-json', '--no-write-thumbnail',
       '--no-mtime', '--no-continue',
       '--socket-timeout', '20', '--retries', '3', '--fragment-retries', '3',
@@ -86,6 +87,12 @@ export class PersonalVideoTask {
         child.stderr.setEncoding('utf8');
         child.stdout.on('data', (chunk: string) => {
           diagnostic = (diagnostic + chunk).slice(-4000);
+          const percentages = [...chunk.matchAll(/\[download\]\s+(\d+(?:\.\d+)?)%/g)];
+          if (percentages.length) {
+            const value = Number(percentages[percentages.length - 1][1]);
+            if (Number.isFinite(value)) progress({ phase: 'download',
+              percent: Math.min(48, 5 + Math.floor(value * 0.43)), seconds: 0 });
+          }
         });
         child.stderr.on('data', (chunk: string) => {
           diagnostic = (diagnostic + chunk).slice(-4000);
