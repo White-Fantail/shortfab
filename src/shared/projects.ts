@@ -44,6 +44,7 @@ export interface ProjectRecord {
   youtubeDuration: number | null; // IFrame API metadata, not a renderable asset.
   youtubeBinding: StoredMediaBinding | null; // Main process only.
   clips: ProjectClip[];
+  shortClipIds: string[]; // Ordered segments making up ONE short, independent of editor focus.
   selectedClipId: string | null;
   wizard?: WizardRecord; // Optional for legacy schemaVersion 1 projects.
 }
@@ -66,7 +67,7 @@ export interface ProjectSummary {
 }
 
 export type ProjectEdits = Pick<ProjectRecord,
-  'id' | 'revision' | 'title' | 'youtubeUrl' | 'youtubeDuration' | 'clips' | 'selectedClipId' | 'wizard'>;
+  'id' | 'revision' | 'title' | 'youtubeUrl' | 'youtubeDuration' | 'clips' | 'shortClipIds' | 'selectedClipId' | 'wizard'>;
 
 export const isProjectId = (id: unknown): id is string =>
   typeof id === 'string' &&
@@ -138,9 +139,21 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
   if (value.selectedClipId === undefined || (clips.length && value.selectedClipId === null)) {
     throw new Error('저장할 클립을 선택해 주세요.');
   }
+  // Legacy projects exported the focused clip only. Keep that behavior on migration.
+  const shortClipIds = value.shortClipIds === undefined
+    ? value.selectedClipId ? [value.selectedClipId] : [] : value.shortClipIds;
+  if (!Array.isArray(shortClipIds) || shortClipIds.length > 100 ||
+      shortClipIds.some((id) => typeof id !== 'string' || !ids.has(id)) ||
+      new Set(shortClipIds).size !== shortClipIds.length) {
+    throw new Error('쇼츠 구성의 클립 순서가 잘못되었습니다.');
+  }
+  const ordered = shortClipIds.map((id) => clips.find((item) => item.id === id)!);
+  if (ordered.some((item) => item.source !== ordered[0].source)) {
+    throw new Error('하나의 쇼츠에는 동일한 원본의 클립만 넣을 수 있습니다.');
+  }
   return {
     id: value.id, revision: value.revision!, title: value.title.trim(),
-    youtubeUrl: value.youtubeUrl.trim(), youtubeDuration, clips,
+    youtubeUrl: value.youtubeUrl.trim(), youtubeDuration, clips, shortClipIds,
     selectedClipId: value.selectedClipId,
     wizard: normalizeWizard(value.wizard, clips),
   };
