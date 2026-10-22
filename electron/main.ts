@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
+import { layoutSignature } from '../src/shared/layout-styles.js';
 import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
 import { SttTask } from './stt.js';
@@ -408,10 +409,10 @@ app.whenReady().then(() => {
             percent: direct ? 50 + Math.floor(progress.percent * 0.5) : progress.percent,
           });
         }
-      }, activeClip.subtitles ?? null);
+      }, activeClip.subtitles ?? null, activeClip.layout ?? null);
       await publisher.recordRender(path, projectId, activeClip.id, activeClip.start, activeClip.end,
         activeClip.width, direct ? personalSourceId(videoId!) : approved?.id ?? null,
-        JSON.stringify(activeClip.subtitles ?? null));
+        JSON.stringify(activeClip.subtitles ?? null), layoutSignature(activeClip.layout));
       return { status: 'completed', outputPath: path };
     } finally {
       currentTask = null;
