@@ -224,6 +224,22 @@ export function WizardPanel(props: Props) {
           <label>끝 (초)<input type="number" min={0} max={sourceDuration ?? undefined} step={0.1} value={clip.end} disabled={disabled}
             onChange={(event) => props.onClip({ end: Number(event.target.value) })} /></label>
         </div>
+        {props.analysis && <div className="wizard-transcript-editor">
+          <strong>실제 대사로 구간 다듬기</strong>
+          <p className="hint">문장을 선택해 클립 시작 또는 끝 시점을 맞춥니다. 나머지 구간과 자막은 유지됩니다.</p>
+          {props.analysis.segments.filter((segment) =>
+            segment.end >= clip.start - 0.1 && segment.start <= clip.end + 0.1
+          ).slice(0, 24).map((segment, index) => <div className="wizard-speech-row"
+            key={`${segment.start}-${index}`}>
+            <span><small>{time(segment.start)}</small> {segment.text}</span>
+            <div>
+              <button type="button" disabled={disabled || segment.start >= clip.end - 0.2}
+                onClick={() => props.onClip({ start: segment.start })}>IN</button>
+              <button type="button" disabled={disabled || segment.end <= clip.start + 0.2}
+                onClick={() => props.onClip({ end: segment.end })}>OUT</button>
+            </div>
+          </div>)}
+        </div>}
       </>}
       {!clips.length && <p className="hint">아직 선택한 클립이 없습니다. 원본 재생 위치에서 클립을 만들어 주세요.</p>}
     </>}
