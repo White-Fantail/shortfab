@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ProjectStore } from './projects.js';
 import { partnerCatalogConfigured } from './partner.js';
 import { RenderTask } from './render.js';
-import { PersonalVideoTask, personalSourceId } from './personal.js';
+import { PersonalVideoTask, personalSourceId, personalDownloaderAvailable } from './personal.js';
 import { YouTubePublisher } from './youtube.js';
 import { validateRenderRequest, type RenderResult } from '../src/shared/contracts.js';
 import { validatePublishDraft } from '../src/shared/publishing.js';
@@ -254,6 +254,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('render:cancel', () => { personalTask?.cancel(); currentTask?.cancel(); });
+  ipcMain.handle('personal:status', () => personalDownloaderAvailable());
 
   openWindow();
   app.on('activate', () => {
