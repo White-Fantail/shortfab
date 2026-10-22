@@ -1,6 +1,7 @@
 import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId, type MediaInfo, type OutputWidth } from './contracts.js';
 import type { SourceResolution, StoredMediaBinding } from './sources.js';
 import { validateSubtitleTrack, type SubtitleTrack } from './subtitles.js';
+import { normalizeWizard, type WizardRecord } from './wizard.js';
 
 export type ClipSource = 'local' | 'youtube';
 
@@ -38,6 +39,7 @@ export interface ProjectRecord {
   youtubeBinding: StoredMediaBinding | null; // Main process only.
   clips: ProjectClip[];
   selectedClipId: string | null;
+  wizard?: WizardRecord; // Optional for legacy schemaVersion 1 projects.
 }
 
 export type SourceStatus = 'none' | 'connected' | 'missing';
@@ -58,7 +60,7 @@ export interface ProjectSummary {
 }
 
 export type ProjectEdits = Pick<ProjectRecord,
-  'id' | 'revision' | 'title' | 'youtubeUrl' | 'youtubeDuration' | 'clips' | 'selectedClipId'>;
+  'id' | 'revision' | 'title' | 'youtubeUrl' | 'youtubeDuration' | 'clips' | 'selectedClipId' | 'wizard'>;
 
 export const isProjectId = (id: unknown): id is string =>
   typeof id === 'string' &&
@@ -132,6 +134,7 @@ export function validateProjectEdits(input: unknown, sourceDuration: number | nu
     id: value.id, revision: value.revision!, title: value.title.trim(),
     youtubeUrl: value.youtubeUrl.trim(), youtubeDuration, clips,
     selectedClipId: value.selectedClipId,
+    wizard: normalizeWizard(value.wizard, clips),
   };
 }
 
