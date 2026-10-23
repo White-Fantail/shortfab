@@ -11,13 +11,14 @@ export type LayoutStyleId = typeof LAYOUT_STYLES[number]['id'];
 export interface LayoutStyle {
   id: LayoutStyleId;
   focus: number; // 0..100: left to right. Not automatic face tracking.
+  zoom?: number; // 1.0..2.0: persisted, legacy clips default to 1.0.
 }
-export const DEFAULT_LAYOUT: LayoutStyle = { id: 'center', focus: 50 };
+export const DEFAULT_LAYOUT: LayoutStyle = { id: 'center', focus: 50, zoom: 1 };
 
 export function layoutDefault(id: LayoutStyleId): LayoutStyle {
   const found = LAYOUT_STYLES.find(item => item.id === id);
   if (!found) throw new Error('알 수 없는 레이아웃 스타일입니다.');
-  return { id, focus: found.defaultFocus };
+  return { id, focus: found.defaultFocus, zoom: 1 };
 }
 export function validateLayout(value: unknown): LayoutStyle {
   if (value === null || value === undefined) return { ...DEFAULT_LAYOUT };
@@ -27,10 +28,12 @@ export function validateLayout(value: unknown): LayoutStyle {
   const layout = value as Partial<LayoutStyle>;
   if (!LAYOUT_STYLES.some(item => item.id === layout.id) ||
       typeof layout.focus !== 'number' || !Number.isFinite(layout.focus) ||
-      layout.focus < 0 || layout.focus > 100) {
+      layout.focus < 0 || layout.focus > 100 ||
+      (layout.zoom !== undefined && (typeof layout.zoom !== 'number' || !Number.isFinite(layout.zoom) ||
+        layout.zoom < 1 || layout.zoom > 2))) {
     throw new Error('레이아웃 또는 크롭 중심을 다시 확인하세요.');
   }
-  return { id: layout.id!, focus: layout.focus };
+  return { id: layout.id!, focus: layout.focus, zoom: layout.zoom ?? 1 };
 }
 
 export type LayoutFilter = {
@@ -42,19 +45,23 @@ export type LayoutFilter = {
 export function layoutFilter(width: OutputWidth, input: LayoutStyle | null | undefined): LayoutFilter {
   const layout = validateLayout(input);
   const height = Math.round(width * 16 / 9);
+  const zoom = layout.zoom ?? 1;
+  // Even dimensions avoid scaler rounding differences and preserve H.264 compatibility.
+  const scaledWidth = Math.ceil(width * zoom / 2) * 2;
+  const scaledHeight = Math.ceil(height * zoom / 2) * 2;
   if (layout.id === 'blur-fill') {
     const graph =
       '[0:v:0]split=2[back][front];' +
       `[back]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},boxblur=10:2[bg];` +
-      `[front]scale=${width}:${height}:force_original_aspect_ratio=decrease,setsar=1[fg];` +
+      `[front]scale=${scaledWidth}:${scaledHeight}:force_original_aspect_ratio=decrease,setsar=1[fg];` +
       '[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30[v]';
     return { graph, complex: true, output: '[v]' };
   }
-  const position = layout.focus; // Manual refinements apply to every crop preset.
+  const position = layout.focus;
   const x = position === 0 ? '0' : position === 100 ? 'iw-ow' :
     `(iw-ow)*${Number((position / 100).toFixed(4))}`;
   return {
-    graph: `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}:${x}:0,setsar=1,fps=30`,
+    graph: `scale=${scaledWidth}:${scaledHeight}:force_original_aspect_ratio=increase,crop=${width}:${height}:${x}:${zoom === 1 ? '0' : '(ih-oh)/2'},setsar=1,fps=30`,
     complex: false, output: '0:v:0',
   };
 }
