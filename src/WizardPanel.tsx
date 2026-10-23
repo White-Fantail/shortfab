@@ -161,7 +161,7 @@ export function WizardPanel(props: Props) {
     if (clip) {
       fields.clipId = clip.id;
       if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; fields.partCount = sequenceParts.length; fields.duration = sequenceSeconds; }
-      if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; fields.zoom = validateLayout(clip.layout).zoom; }
+      if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; fields.zoom = validateLayout(clip.layout).zoom ?? 1; }
       if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; fields.hook = !!clip.subtitles?.hook; fields.emphasisCount = clip.subtitles?.cues.filter(item => item.emphasis).length ?? 0; }
       if (step === 'audio') { fields.mode = clip.narration?.mode ?? 'off'; fields.voice = clip.narration?.voice ?? 'ko'; }
       if (step === 'cta') fields.enabled = false;
