@@ -22,6 +22,8 @@ describe('AG3 selectable style catalog and export contract', () => {
       const selected = layoutDefault(item.id);
       expect(validateLayout(selected)).toEqual(selected);
     }
+    // Older saved project JSON has no zoom attribute.
+    expect(validateLayout({ id: 'focus-left', focus: 20 })).toEqual({ id: 'focus-left', focus: 20, zoom: 1 });
   });
 
   it('rejects invalid, out-of-range or injected style input', () => {
@@ -29,6 +31,8 @@ describe('AG3 selectable style catalog and export contract', () => {
       { id: 'custom::movie', focus: 20 }, { id: 'center', focus: NaN },
       { id: 'center', focus: -1 }, { id: 'center', focus: 101 },
       { id: 'center', focus: '75' }, 123,
+      { id: 'center', focus: 50, zoom: 0.95 }, { id: 'center', focus: 50, zoom: 2.05 },
+      { id: 'center', focus: 50, zoom: Infinity }, { id: 'center', focus: 50, zoom: '1.5' },
     ]) expect(() => validateLayout(input)).toThrow();
   });
 
@@ -41,6 +45,13 @@ describe('AG3 selectable style catalog and export contract', () => {
     expect(blurred.complex).toBe(true);
     expect(blurred.graph).toContain('boxblur');
     expect(blurred.graph).toContain('overlay=');
+    const enlarged = layoutFilter(720, { id: 'focus-left', focus: 35, zoom: 1.5 });
+    expect(enlarged.graph).toContain('scale=1080:1920:force_original_aspect_ratio=increase');
+    expect(enlarged.graph).toContain('crop=720:1280:(iw-ow)*0.35:(ih-oh)/2');
+    expect(layoutFilter(720, { id: 'blur-fill', focus: 50, zoom: 1.5 }).graph)
+      .toContain('[front]scale=1080:1920:force_original_aspect_ratio=decrease');
+    expect(layoutSignature({ id: 'center', focus: 50, zoom: 1 }))
+      .not.toBe(layoutSignature({ id: 'center', focus: 50, zoom: 1.5 }));
   });
 
   it('isolates layout changes to the selected clip and invalidates downstream approvals', () => {
@@ -62,5 +73,15 @@ describe('AG3 selectable style catalog and export contract', () => {
     expect(stepPlan(state, first.id, 'export').status).toBe('needs_review');
     expect(stepPlan(state, second.id, 'layout').status).toBe('accepted');
     expect(layoutSignature(layoutDefault('center'))).not.toBe(layoutSignature(layoutDefault('blur-fill')));
+    state = acceptStep(state, second.id, 'layout');
+    state = acceptStep(state, second.id, 'review');
+    const zoomed = { ...second, layout: { ...layoutDefault('center'), zoom: 1.25 } };
+    const changed = reconcileWizard(state, {
+      youtubeUrl: 'https://youtu.be/abcdefghijk', youtubeDuration: 120, clips: [first, second],
+    }, {
+      youtubeUrl: 'https://youtu.be/abcdefghijk', youtubeDuration: 120, clips: [first, zoomed],
+    });
+    expect(stepPlan(changed, second.id, 'layout').status).toBe('needs_review');
+    expect(stepPlan(changed, second.id, 'review').status).toBe('needs_review');
   });
 });
