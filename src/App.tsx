@@ -847,12 +847,14 @@ function App() {
   }
 
   function wizardGoTo(step: WizardStep) {
+    if (step === 'layout' && clip) moveTo(clip.start);
     changeDraft((current) => ({
       ...current, wizard: { ...normalizeWizard(current.wizard, current.clips), activeStep: step },
     }));
   }
 
   function wizardAccept(step: WizardStep, fields: WizardFields, skipped = false) {
+    if (step === 'clips' && clip) moveTo(clip.start);
     changeDraft((current) => {
       const existing = normalizeWizard(current.wizard, current.clips);
       const updated = skipped ? skipStep(existing, current.selectedClipId, step)
