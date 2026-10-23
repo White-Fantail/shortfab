@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CLIP_TIME_EPSILON, MIN_CLIP_SECONDS, youtubeVideoId, type RenderProgress } from './shared/contracts';
 import { YouTubePreview, type YouTubeControls } from './YouTubePreview';
+import { StyledPreviewOverlay } from './StyledPreviewOverlay';
+import { validateLayout } from './shared/layout-styles';
 import {
   projectEditValidationError,
   type ProjectClip, type ProjectEdits, type ProjectSummary, type ProjectView,
@@ -108,6 +110,15 @@ function App() {
   const sourceDuration = sourceTab === 'youtube' ? draft?.youtubeDuration ?? null : media?.duration ?? null;
   const draftValidationError = draft ? projectEditValidationError(draft, media?.duration ?? null) : null;
   const currentTime = Math.max(0, Math.min(scrubTime ?? playhead, sourceDuration ?? 0));
+  const liveLayout = clip ? validateLayout(clip.layout) : null;
+  const styledPreview = Boolean(wizardMode && clip?.style && liveLayout &&
+    ['layout', 'audio', 'subtitles', 'cta', 'review', 'export'].includes(wizard.activeStep));
+  const livePreviewStyle = styledPreview && liveLayout ? {
+    '--sf-focus': `${liveLayout.focus}%`,
+    '--sf-zoom': String(liveLayout.zoom ?? 1),
+    // A 16:9 embed must be 3.16x as wide as a 9:16 portrait to remain uncropped at source.
+    '--sf-yt-left': `${(1 - 256 / 81) * liveLayout.focus}%`,
+  } as CSSProperties : undefined;
   const activeCaption = clip?.subtitles?.cues.find((cue) =>
     currentTime >= clip.start + cue.start && currentTime < clip.start + cue.end && cue.text.trim());
   const validClip = Boolean(clip && sourceDuration !== null &&
@@ -1313,9 +1324,10 @@ function App() {
         </aside>
 
         <main className="preview-area">
-          <div className="preview-heading"><div><p className="eyebrow">{sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{sourceTab === 'youtube' ? (wizardMode ? '원본 영상 · 합성 출력 프리뷰 아님' : 'YouTube 원본 구간 탐색') : '출력 프레임 미리보기'}</h2></div><span>{sourceTab === 'youtube' ? 'YOUTUBE · CLIP' : '9:16'}</span></div>
+          <div className="preview-heading"><div><p className="eyebrow">{styledPreview ? 'LIVE STYLE GUIDE' : sourceTab === 'youtube' ? 'YOUTUBE SOURCE PLAYER' : 'CANVAS PREVIEW'}</p><h2>{styledPreview ? '선택 클립 · 스타일 미리보기' : sourceTab === 'youtube' ? 'YouTube 원본 구간 탐색' : '출력 프레임 미리보기'}</h2></div><span>{styledPreview ? '9:16 · 스타일 적용' : sourceTab === 'youtube' ? 'YOUTUBE · CLIP' : '9:16'}</span></div>
           <div className="preview-stage">
-            <div className="portrait">
+            <div className={`portrait${styledPreview && liveLayout ? ` live-style-portrait live-style-${liveLayout.id}` : ''}`} style={livePreviewStyle}>
+              <div className="source-video-surface">
               {sourceTab === 'youtube' && youtubeId ? (
                 <YouTubePreview key={youtubeId} ref={youtubePlayer} videoId={youtubeId}
                   start={wizardMode && recommendationPreview ? recommendationPreview.start : clip?.start ?? null}
@@ -1335,6 +1347,9 @@ function App() {
                   <small>{sourceTab === 'youtube' ? 'YouTube URL을 입력해 주세요' : project?.sourceStatus === 'missing' ? '원본을 재연결해 주세요' : '로컬 영상을 선택하세요'}</small>
                 </div>
               )}
+              </div>
+              {styledPreview && clip ? <StyledPreviewOverlay clip={clip} time={currentTime}
+                frameImage={frameStill?.key === frameKey ? frameStill.image : null} videoId={youtubeId} /> : <>
               {clip?.subtitles?.hook && currentTime >= clip.start &&
                 currentTime < clip.start + clip.subtitles.hook.duration && <div aria-hidden="true"
                   className={`subtitle-hook-preview hook-${clip.subtitles.hook.style}`}>
@@ -1344,8 +1359,10 @@ function App() {
                 className={`subtitle-preview subtitle-${activeCaption.emphasis ? 'emphasis' : clip.subtitles.preset}`}>
                 {activeCaption.text}
               </div>}
+              </>}
             </div>
           </div>
+          {styledPreview && clip && <p className="preview-style-note">▶ 선택한 구간을 재생하며 구도를 확인하세요 · 실제 렌더와 글꼴/자막 타이밍이 다를 수 있습니다.{!clip.subtitles?.cues.length ? ' 현재 자막은 예시입니다.' : ''}</p>}
           <div className="timeline">
             <div className="timeline-top">
               <div className="timeline-leading">
