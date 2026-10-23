@@ -26,7 +26,7 @@ describe('AG3 actual composed frame and style MP4', () => {
       expect(generated.status, generated.stderr).toBe(0);
       const frame = await new FramePreviewTask().capture(source, 1);
       expect(frame.startsWith('data:image/jpeg;base64,/9j/')).toBe(true);
-      for (const style of ['center', 'focus-left', 'blur-fill'] as const) {
+      for (const style of ['center', 'focus-left', 'blur-fill', 'zoomed'] as const) {
         const output = join(temp, style + '.mp4');
         const request = validateRenderRequest({
           sourceId: 'youtube:abcdefghijk', start: 0.2, end: 1.15, width: 720,
@@ -34,7 +34,8 @@ describe('AG3 actual composed frame and style MP4', () => {
         await new RenderTask().run(source, output, request, () => {},
           style === 'blur-fill' ? { preset: 'impact', cues: [
             { id: 'test-cue', start: 0.1, end: 0.6, text: 'Style test', emphasis: true },
-          ], hook: { text: 'Look at this', duration: 0.7, style: 'banner' } } : null, layoutDefault(style));
+          ], hook: { text: 'Look at this', duration: 0.7, style: 'banner' } } : null,
+          style === 'zoomed' ? { id: 'focus-right', focus: 70, zoom: 1.5 } : layoutDefault(style));
         const media = await probeMedia(output);
         expect(media.width).toBe(720);
         expect(media.height).toBe(1280);
