@@ -1,12 +1,13 @@
 import { useRef } from 'react';
 import { SHORT_STYLES, defaultFixedSlots, fixedPositions, type ShortStyleId, type ShortStyleSelection, type FixedPosition } from './shared/short-styles';
 
-export function StyleGallery({ selected, configuredStyle, videoId, frameImage, focus, sampleText, disabled, onChoose }: {
+export function StyleGallery({ selected, configuredStyle, videoId, frameImage, focus, zoom, sampleText, disabled, onChoose }: {
   selected: ShortStyleId | null;
   configuredStyle?: ShortStyleSelection | null;
   videoId: string | null;
   frameImage?: string | null;
   focus?: number;
+  zoom?: number;
   sampleText?: string;
   disabled: boolean;
   onChoose: (id: ShortStyleId) => void;
@@ -36,9 +37,14 @@ export function StyleGallery({ selected, configuredStyle, videoId, frameImage, f
             {thumbnail ? <>
               {style.layout === 'blur-fill' && <img className="style-thumb-blur" src={thumbnail} alt="" loading="lazy" />}
               <img className="style-thumb-primary" src={thumbnail} alt="" loading="lazy"
-                style={style.layout === 'blur-fill' ? { objectFit: 'contain' } :
-                  { objectPosition: `${selected === style.id && Number.isFinite(focus) ? focus :
-                    style.layout === 'focus-left' ? 0 : style.layout === 'focus-right' ? 100 : 50}% center` }} />
+                style={{
+                  objectFit: style.layout === 'blur-fill' ? 'contain' : 'cover',
+                  objectPosition: `${selected === style.id && Number.isFinite(focus) ? focus :
+                    style.layout === 'focus-left' ? 0 : style.layout === 'focus-right' ? 100 : 50}% center`,
+                  transform: selected === style.id ? `scale(${zoom ?? 1})` : undefined,
+                  transformOrigin: `${selected === style.id && Number.isFinite(focus) ? focus :
+                    style.layout === 'focus-left' ? 0 : style.layout === 'focus-right' ? 100 : 50}% center`,
+                }} />
             </> : <span className="style-thumb-placeholder">▣</span>}
             {fixedPositions(style.id).map((position: FixedPosition) => {
               const slot = fixed[position];
