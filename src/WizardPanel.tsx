@@ -161,7 +161,7 @@ export function WizardPanel(props: Props) {
     if (clip) {
       fields.clipId = clip.id;
       if (step === 'clips') { fields.start = clip.start; fields.end = clip.end; fields.partCount = sequenceParts.length; fields.duration = sequenceSeconds; }
-      if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; }
+      if (step === 'layout') { fields.width = clip.width; fields.style = clip.style?.id ?? 'legacy'; fields.focus = validateLayout(clip.layout).focus; fields.zoom = validateLayout(clip.layout).zoom; }
       if (step === 'subtitles') { fields.cueCount = clip.subtitles?.cues.length ?? 0; fields.style = clip.subtitles?.preset ?? 'classic'; fields.hook = !!clip.subtitles?.hook; fields.emphasisCount = clip.subtitles?.cues.filter(item => item.emphasis).length ?? 0; }
       if (step === 'audio') { fields.mode = clip.narration?.mode ?? 'off'; fields.voice = clip.narration?.voice ?? 'ko'; }
       if (step === 'cta') fields.enabled = false;
@@ -427,22 +427,40 @@ export function WizardPanel(props: Props) {
       </div>
       <StyleGallery videoId={youtubeId} frameImage={props.frameImage}
         configuredStyle={clip?.style} selected={clip?.style?.id ?? null} focus={validateLayout(clip?.layout).focus}
+        zoom={validateLayout(clip?.layout).zoom}
         sampleText={clip?.narration?.mode === 'tts' ? splitNarration(clip.narration.text)[0] : clip?.subtitles?.cues[0]?.text}
-        disabled={!clip || disabled} onChoose={(id) => props.onClip(selectShortStyle(id, clip?.subtitles))} />
-      {clip && validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
-        <span>화면 가로 중심 · {Math.round(validateLayout(clip.layout).focus)}%</span>
-        <input type="range" min={0} max={100} step={1} disabled={disabled}
-          value={validateLayout(clip.layout).focus} onChange={(event) =>
-            props.onClip({ layout: { ...validateLayout(clip.layout), focus: Number(event.target.value) } })} />
-        <small>← 원본 왼쪽 · 원본 오른쪽 →</small>
-      </label>}
+        disabled={!clip || disabled} onChoose={(id) => {
+          const selection = selectShortStyle(id, clip?.subtitles);
+          props.onClip({ ...selection, layout: { ...selection.layout, zoom: validateLayout(clip?.layout).zoom } });
+        }} />
+      {clip && <div className="wizard-framing-controls">
+        {validateLayout(clip.layout).id !== 'blur-fill' && <label className="wizard-focus-control">
+          <span>화면 가로 위치 · {Math.round(validateLayout(clip.layout).focus)}%</span>
+          <input aria-label="화면 가로 위치" type="range" min={0} max={100} step={1} disabled={disabled}
+            value={validateLayout(clip.layout).focus} onChange={(event) =>
+              props.onClip({ layout: { ...validateLayout(clip.layout), focus: Number(event.target.value) } })} />
+          <small>← 왼쪽 · 오른쪽 →</small>
+        </label>}
+        <label className="wizard-focus-control">
+          <span>화면 확대 · {Math.round((validateLayout(clip.layout).zoom ?? 1) * 100)}%</span>
+          <input aria-label="화면 확대" type="range" min={100} max={200} step={5} disabled={disabled}
+            value={Math.round((validateLayout(clip.layout).zoom ?? 1) * 100)}
+            onChange={(event) => props.onClip({ layout: { ...validateLayout(clip.layout),
+              zoom: Number(event.target.value) / 100 } })} />
+          <small>100% 기본 · 200% 최대 확대</small>
+        </label>
+        <button type="button" className="wizard-framing-reset" disabled={disabled}
+          onClick={() => props.onClip({ layout: { ...validateLayout(clip.layout), zoom: 1, focus: 50 } })}>
+          위치·줌 초기화
+        </button>
+      </div>}
       <p className="eyebrow">영상 해상도</p>
       <div className="wizard-choice-grid">
         {([720, 1080] as const).map((width) => <button type="button" key={width}
           className={clip?.width === width ? 'selected' : ''} disabled={!clip || disabled}
           onClick={() => props.onClip({ width })}>{width}p <small>{width === 720 ? '빠른 출력' : 'Full HD'}</small></button>)}
       </div>
-      <p className="hint">오른쪽 YouTube 플레이어는 원본 참고용입니다. 선택 클립 프레임을 가져오면 정확한 시점의 정지 이미지를 이용합니다. 실제 동영상 재생/자막 타이밍 프리뷰는 아닙니다.</p>
+      <p className="hint">오른쪽 9:16 화면에서 선택 클립의 구도·줌·자막 스타일을 재생하며 확인할 수 있습니다. 자막 예시와 YouTube 플레이어 크롭은 참고용이며, 최종 출력은 FFmpeg가 같은 위치·줌 설정으로 합성합니다.</p>
     </>}
 
     {step === 'subtitles' && <>
